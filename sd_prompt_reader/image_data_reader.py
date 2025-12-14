@@ -235,40 +235,60 @@ class ImageDataReader:
 
     @staticmethod
     def save_image(image_path, new_path, image_format, data=None):
-        metadata = None
-        if data:
-            match image_format.upper():
-                case "PNG":
-                    metadata = PngInfo()
-                    metadata.add_text("parameters", data)
-                case "JPEG" | "JPG" | "WEBP":
-                    metadata = piexif.dump(
-                        {
-                            "Exif": {
-                                piexif.ExifIFD.UserComment: (
-                                    piexif.helper.UserComment.dump(
-                                        data, encoding="unicode"
-                                    )
-                                )
-                            },
-                        }
-                    )
-
         with Image.open(image_path) as f:
             try:
                 match image_format.upper():
                     case "PNG":
                         if data:
+                            metadata = PngInfo()
+                            src_info = f.info or {}
+
+                            # If the source file contains ComfyUI metadata, adding an A1111-style
+                            # "parameters" field can cause ComfyUI to import a simplified workflow.
+                            # To ensure the original workflow (including hidden/custom nodes)
+                            # remains loadable, store the edited text under a non-standard key.
+                            if (
+                                ("workflow" in src_info or "prompt" in src_info)
+                                and "parameters" not in src_info
+                            ):
+                                parameter_key = "sd_prompt_reader_parameters"
+                            else:
+                                parameter_key = "parameters"
+
+                            metadata.add_text(parameter_key, data)
+
+                            # Preserve ComfyUI metadata when rewriting edited text.
+                            for key in ("prompt", "workflow"):
+                                if key in src_info and src_info.get(key) not in (None, ""):
+                                    value = src_info.get(key)
+                                    if isinstance(value, (dict, list)):
+                                        value = json.dumps(value, ensure_ascii=False)
+                                    metadata.add_text(key, str(value))
+
                             f.save(new_path, pnginfo=metadata)
                         else:
                             f.save(new_path)
-                    case "JPEG" | "JPG":
-                        f.save(new_path, quality="keep")
+                    case "JPEG" | "JPG" | "WEBP":
+                        metadata = None
                         if data:
-                            piexif.insert(metadata, str(new_path))
-                    case "WEBP":
-                        f.save(new_path, quality=100, lossless=True)
-                        if data:
+                            metadata = piexif.dump(
+                                {
+                                    "Exif": {
+                                        piexif.ExifIFD.UserComment: (
+                                            piexif.helper.UserComment.dump(
+                                                data, encoding="unicode"
+                                            )
+                                        )
+                                    },
+                                }
+                            )
+
+                        if image_format.upper() in ("JPEG", "JPG"):
+                            f.save(new_path, quality="keep")
+                        else:
+                            f.save(new_path, quality=100, lossless=True)
+
+                        if data and metadata:
                             piexif.insert(metadata, str(new_path))
             except Exception:
                 print("Save error")
