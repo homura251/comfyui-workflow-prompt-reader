@@ -12,6 +12,7 @@ from CTkToolTip import *
 from PIL import Image
 from customtkinter import (
     ScalingTracker,
+    CTkButton,
     CTkFrame,
     ThemeManager,
     filedialog,
@@ -104,6 +105,35 @@ class App(Tk):
             "<Button-1>",
             lambda e: self.display_info(self.select_image(), is_selected=True),
         )
+
+        # image navigation (previous/next)
+        self._image_sequence = []
+        self._image_sequence_index = None
+        self._nav_button_size = BUTTON_HEIGHT_S
+        self._nav_button_corner = int(self._nav_button_size / 2)
+        self._nav_button_font = CTkFont(size=18)
+
+        self.button_prev_image = CTkButton(
+            self.image_frame,
+            width=self._nav_button_size,
+            height=self._nav_button_size,
+            corner_radius=self._nav_button_corner,
+            text="◀",
+            font=self._nav_button_font,
+            command=lambda: self.navigate_image(-1),
+        )
+        self.button_prev_image.place(relx=0.03, rely=0.5, anchor="w")
+
+        self.button_next_image = CTkButton(
+            self.image_frame,
+            width=self._nav_button_size,
+            height=self._nav_button_size,
+            corner_radius=self._nav_button_corner,
+            text="▶",
+            font=self._nav_button_font,
+            command=lambda: self.navigate_image(1),
+        )
+        self.button_next_image.place(relx=0.97, rely=0.5, anchor="e")
 
         self.image = None
         self.image_tk = None
@@ -471,6 +501,9 @@ class App(Tk):
         self.drop_target_register(DND_FILES)
         self.dnd_bind("<<Drop>>", self.display_info)
         self.bind("<Configure>", self.resize_image)
+        self.bind_all("<Left>", self.on_prev_image_key, add="+")
+        self.bind_all("<Right>", self.on_next_image_key, add="+")
+        self.update_image_navigation_state()
 
         # update checker
         self.update_checker = UpdateChecker(self.status_bar)
@@ -499,6 +532,7 @@ class App(Tk):
         # detect suffix and read
         if new_path.suffix.lower() in SUPPORTED_FORMATS:
             self.file_path = new_path
+            self.refresh_image_sequence(self.file_path)
             with open(self.file_path, "rb") as f:
                 self.image_data = ImageDataReader(f)
                 if (
@@ -542,6 +576,7 @@ class App(Tk):
                 self.resize_image()
             if self.button_edit.mode == EditMode.ON:
                 self.edit_mode_update()
+            self.update_image_navigation_state()
 
         # txt importing
         elif new_path.suffix == ".txt":
@@ -579,6 +614,7 @@ class App(Tk):
         if reset_image:
             self.image_label.configure(image=self.drop_image, text=MESSAGE["drop"][0])
             self.image = None
+            self.clear_image_sequence()
         else:
             self.button_edit.enable()
         self.status_bar.warning(message[-1])
@@ -624,6 +660,71 @@ class App(Tk):
                 )
             # display image
             self.image_label.configure(image=self.image_tk, text="")
+
+    def refresh_image_sequence(self, current_path: Path):
+        try:
+            directory = current_path.parent
+            candidates = [
+                p
+                for p in directory.iterdir()
+                if p.is_file() and p.suffix.lower() in SUPPORTED_FORMATS
+            ]
+            candidates.sort(key=lambda p: p.name.lower())
+
+            current_resolved = current_path.resolve()
+            resolved_candidates = [p.resolve() for p in candidates]
+            self._image_sequence = candidates
+            self._image_sequence_index = (
+                resolved_candidates.index(current_resolved)
+                if current_resolved in resolved_candidates
+                else None
+            )
+        except Exception:
+            self._image_sequence = []
+            self._image_sequence_index = None
+
+    def clear_image_sequence(self):
+        self._image_sequence = []
+        self._image_sequence_index = None
+        self.update_image_navigation_state()
+
+    def update_image_navigation_state(self):
+        has_prev = (
+            self._image_sequence_index is not None and self._image_sequence_index > 0
+        )
+        has_next = (
+            self._image_sequence_index is not None
+            and self._image_sequence_index < len(self._image_sequence) - 1
+        )
+        self.button_prev_image.configure(state="normal" if has_prev else "disabled")
+        self.button_next_image.configure(state="normal" if has_next else "disabled")
+
+    def _navigation_key_should_trigger(self):
+        focused = self.focus_get()
+        if self.button_edit.mode == EditMode.ON and focused is not None:
+            try:
+                widget_class = focused.winfo_class()
+            except Exception:
+                widget_class = ""
+            if widget_class in ("Text", "Entry", "TEntry", "Spinbox"):
+                return False
+        return True
+
+    def on_prev_image_key(self, event=None):
+        if self._navigation_key_should_trigger():
+            self.navigate_image(-1)
+
+    def on_next_image_key(self, event=None):
+        if self._navigation_key_should_trigger():
+            self.navigate_image(1)
+
+    def navigate_image(self, delta: int):
+        if self._image_sequence_index is None:
+            return
+        new_index = self._image_sequence_index + delta
+        if new_index < 0 or new_index >= len(self._image_sequence):
+            return
+        self.display_info(str(self._image_sequence[new_index]), is_selected=True)
 
     def copy_to_clipboard(self, content):
         try:
