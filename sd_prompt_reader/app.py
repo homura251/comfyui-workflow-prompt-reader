@@ -5,6 +5,8 @@ __email__ = "receyuki@gmail.com"
 
 import platform
 import sys
+import os
+import threading
 from tkinter import PhotoImage, Menu
 
 import pyperclip as pyperclip
@@ -109,6 +111,10 @@ class App(Tk):
         # image navigation (previous/next)
         self._image_sequence = []
         self._image_sequence_index = None
+        self._image_sequence_index_by_key = {}
+        self._image_sequence_dir_key = None
+        self._image_sequence_scan_id = 0
+        self._image_sequence_scanning = False
         self._nav_button_size = BUTTON_HEIGHT_S
         self._nav_button_corner = int(self._nav_button_size / 2)
         self._nav_button_font = CTkFont(size=18)
@@ -661,31 +667,91 @@ class App(Tk):
             # display image
             self.image_label.configure(image=self.image_tk, text="")
 
-    def refresh_image_sequence(self, current_path: Path):
-        try:
-            directory = current_path.parent
-            candidates = [
-                p
-                for p in directory.iterdir()
-                if p.is_file() and p.suffix.lower() in SUPPORTED_FORMATS
-            ]
-            candidates.sort(key=lambda p: p.name.lower())
+    @staticmethod
+    def _normalize_path_key(path: Path):
+        return os.path.normcase(os.path.abspath(str(path)))
 
-            current_resolved = current_path.resolve()
-            resolved_candidates = [p.resolve() for p in candidates]
-            self._image_sequence = candidates
-            self._image_sequence_index = (
-                resolved_candidates.index(current_resolved)
-                if current_resolved in resolved_candidates
-                else None
-            )
-        except Exception:
+    def refresh_image_sequence(self, current_path: Path):
+        directory = current_path.parent
+        directory_key = self._normalize_path_key(directory)
+        current_key = self._normalize_path_key(current_path)
+
+        if directory_key != self._image_sequence_dir_key:
+            self._image_sequence_dir_key = directory_key
             self._image_sequence = []
+            self._image_sequence_index_by_key = {}
             self._image_sequence_index = None
+            self.update_image_navigation_state()
+            self._start_image_sequence_scan(directory)
+            return
+
+        if current_key in self._image_sequence_index_by_key:
+            self._image_sequence_index = self._image_sequence_index_by_key[current_key]
+            self.update_image_navigation_state()
+            return
+
+        if not self._image_sequence_scanning:
+            self._start_image_sequence_scan(directory)
+
+    def _start_image_sequence_scan(self, directory: Path):
+        self._image_sequence_scan_id += 1
+        scan_id = self._image_sequence_scan_id
+        self._image_sequence_scanning = True
+
+        def worker():
+            candidates = []
+            index_by_key = {}
+            try:
+                for entry in os.scandir(directory):
+                    if not entry.is_file():
+                        continue
+                    suffix = os.path.splitext(entry.name)[1].lower()
+                    if suffix in SUPPORTED_FORMATS:
+                        candidates.append(Path(entry.path))
+                candidates.sort(key=lambda p: p.name.casefold())
+                index_by_key = {
+                    self._normalize_path_key(p): i for i, p in enumerate(candidates)
+                }
+            except Exception:
+                candidates = []
+                index_by_key = {}
+
+            self.after(
+                0,
+                lambda: self._finish_image_sequence_scan(
+                    scan_id, directory, candidates, index_by_key
+                ),
+            )
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _finish_image_sequence_scan(
+        self, scan_id: int, directory: Path, candidates: list, index_by_key: dict
+    ):
+        if scan_id != self._image_sequence_scan_id:
+            return
+
+        self._image_sequence_scanning = False
+        if self._normalize_path_key(directory) != self._image_sequence_dir_key:
+            return
+
+        self._image_sequence = candidates
+        self._image_sequence_index_by_key = index_by_key
+        if self.file_path is not None:
+            current_key = self._normalize_path_key(self.file_path)
+            self._image_sequence_index = self._image_sequence_index_by_key.get(
+                current_key
+            )
+        else:
+            self._image_sequence_index = None
+        self.update_image_navigation_state()
 
     def clear_image_sequence(self):
         self._image_sequence = []
         self._image_sequence_index = None
+        self._image_sequence_index_by_key = {}
+        self._image_sequence_dir_key = None
+        self._image_sequence_scanning = False
         self.update_image_navigation_state()
 
     def update_image_navigation_state(self):
