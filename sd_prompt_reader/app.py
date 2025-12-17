@@ -7,6 +7,7 @@ import platform
 import sys
 import os
 import threading
+from collections import OrderedDict
 from tkinter import PhotoImage, Menu
 
 import pyperclip as pyperclip
@@ -94,6 +95,11 @@ class App(Tk):
             row=0, column=0, rowspan=4, sticky="news", padx=20, pady=20
         )
 
+        self.image_frame.rowconfigure(0, weight=1)
+        self.image_frame.columnconfigure(0, weight=0)
+        self.image_frame.columnconfigure(1, weight=1)
+        self.image_frame.columnconfigure(2, weight=0)
+
         self.image_label = CTkLabel(
             self.image_frame,
             width=560,
@@ -102,7 +108,7 @@ class App(Tk):
             compound="top",
             text_color=ACCESSIBLE_GRAY,
         )
-        self.image_label.pack(fill="both", expand=True)
+        self.image_label.grid(row=0, column=1, sticky="news")
         self.image_label.bind(
             "<Button-1>",
             lambda e: self.display_info(self.select_image(), is_selected=True),
@@ -115,31 +121,57 @@ class App(Tk):
         self._image_sequence_dir_key = None
         self._image_sequence_scan_id = 0
         self._image_sequence_scanning = False
+
+        self._image_cache = OrderedDict()
+        self._image_cache_max = 6
+
+        self._image_load_lock = threading.Lock()
+        self._image_load_event = threading.Event()
+        self._image_load_requested_path = None
+        self._image_load_requested_max_dim = None
+        self._image_load_request_id = 0
         self._nav_button_size = BUTTON_HEIGHT_S
         self._nav_button_corner = int(self._nav_button_size / 2)
-        self._nav_button_font = CTkFont(size=18)
+        self._nav_button_font = CTkFont(size=16)
+        self._nav_button_style = {
+            "width": self._nav_button_size,
+            "height": self._nav_button_size,
+            "corner_radius": self._nav_button_corner,
+            "font": self._nav_button_font,
+            "border_width": 1,
+            "border_color": ACCESSIBLE_GRAY,
+            "hover_color": BUTTON_HOVER,
+            "fg_color": ThemeManager.theme["CTkFrame"]["fg_color"],
+            "text_color": ACCESSIBLE_GRAY,
+        }
+
+        self.nav_left_frame = CTkFrame(self.image_frame, fg_color="transparent")
+        self.nav_left_frame.grid(row=0, column=0, sticky="nsw")
+        self.nav_left_frame.rowconfigure(0, weight=1)
+        self.nav_left_frame.rowconfigure(1, weight=0)
+        self.nav_left_frame.rowconfigure(2, weight=1)
 
         self.button_prev_image = CTkButton(
-            self.image_frame,
-            width=self._nav_button_size,
-            height=self._nav_button_size,
-            corner_radius=self._nav_button_corner,
-            text="◀",
-            font=self._nav_button_font,
+            self.nav_left_frame,
+            text="<",
             command=lambda: self.navigate_image(-1),
+            **self._nav_button_style,
         )
-        self.button_prev_image.place(relx=0.03, rely=0.5, anchor="w")
+        self.button_prev_image.grid(row=1, column=0, padx=(6, 8))
+
+        self.nav_right_frame = CTkFrame(self.image_frame, fg_color="transparent")
+        self.nav_right_frame.grid(row=0, column=2, sticky="nse")
+        self.nav_right_frame.rowconfigure(0, weight=1)
+        self.nav_right_frame.rowconfigure(1, weight=0)
+        self.nav_right_frame.rowconfigure(2, weight=1)
 
         self.button_next_image = CTkButton(
-            self.image_frame,
-            width=self._nav_button_size,
-            height=self._nav_button_size,
-            corner_radius=self._nav_button_corner,
-            text="▶",
-            font=self._nav_button_font,
+            self.nav_right_frame,
+            text=">",
             command=lambda: self.navigate_image(1),
+            **self._nav_button_style,
         )
-        self.button_next_image.place(relx=0.97, rely=0.5, anchor="e")
+        self.button_next_image.grid(row=1, column=0, padx=(8, 6))
 
         self.image = None
         self.image_tk = None
@@ -510,6 +542,7 @@ class App(Tk):
         self.bind_all("<Left>", self.on_prev_image_key, add="+")
         self.bind_all("<Right>", self.on_next_image_key, add="+")
         self.update_image_navigation_state()
+        self._start_image_loader()
 
         # update checker
         self.update_checker = UpdateChecker(self.status_bar)
@@ -539,50 +572,9 @@ class App(Tk):
         if new_path.suffix.lower() in SUPPORTED_FORMATS:
             self.file_path = new_path
             self.refresh_image_sequence(self.file_path)
-            with open(self.file_path, "rb") as f:
-                self.image_data = ImageDataReader(f)
-                if (
-                    not self.image_data.tool
-                    or self.image_data.status.name == "FORMAT_ERROR"
-                ):
-                    self.unsupported_format(MESSAGE["format_error"])
-                elif self.image_data.status.name == "COMFYUI_ERROR":
-                    self.unsupported_format(
-                        MESSAGE["comfyui_error"], url=URL["comfyui"], raw=True
-                    )
-                else:
-                    self.readable = True
-                    # insert prompt
-                    if not self.image_data.is_sdxl:
-                        self.positive_box.display(self.image_data.positive)
-                        self.negative_box.display(self.image_data.negative)
-                    else:
-                        self.positive_box.display(self.image_data.positive_sdxl)
-                        self.negative_box.display(self.image_data.negative_sdxl)
-                    self.setting_box.text = self.image_data.setting
-                    self.setting_box_parameter.update_text(self.image_data.parameter)
-                    self.positive_box.mode_update()
-                    self.negative_box.mode_update()
-                    if self.button_edit.mode == EditMode.OFF:
-                        for button in self.function_buttons:
-                            button.enable()
-                        self.positive_box.all_on()
-                        self.negative_box.all_on()
-                    for button in self.edit_buttons:
-                        button.enable()
-                    self.positive_box.copy_on()
-                    self.negative_box.copy_on()
-                    if self.image_data.tool != "A1111 webUI":
-                        self.button_raw_option_arrow.disable()
-                    if self.image_data.is_sdxl:
-                        self.button_edit.disable()
-                    self.status_bar.success(self.image_data.tool)
-                self.image = Image.open(f)
-                self.image_tk = CTkImage(self.image)
-                self.resize_image()
-            if self.button_edit.mode == EditMode.ON:
-                self.edit_mode_update()
-            self.update_image_navigation_state()
+            self._prepare_loading_state()
+            self._request_image_load(self.file_path)
+            return
 
         # txt importing
         elif new_path.suffix == ".txt":
@@ -643,8 +635,8 @@ class App(Tk):
                 else 560
             )
             image_frame_width = (
-                self.image_frame.winfo_width() - 5
-                if self.image_frame.winfo_width() > 2
+                self.image_label.winfo_width() - 5
+                if self.image_label.winfo_width() > 2
                 else 560
             )
             if self.image.size[0] > self.image.size[1]:
@@ -666,6 +658,16 @@ class App(Tk):
                 )
             # display image
             self.image_label.configure(image=self.image_tk, text="")
+
+    def _prepare_loading_state(self):
+        self.readable = False
+        for button in self.function_buttons:
+            button.disable()
+        self.positive_box.all_off()
+        self.negative_box.all_off()
+        self.button_save.disable()
+        self.button_edit.disable()
+        self.status_bar.info("Loading...")
 
     @staticmethod
     def _normalize_path_key(path: Path):
@@ -753,6 +755,165 @@ class App(Tk):
         self._image_sequence_dir_key = None
         self._image_sequence_scanning = False
         self.update_image_navigation_state()
+
+    def _invalidate_image_cache(self, path: Path):
+        key = self._normalize_path_key(path)
+        self._image_cache.pop(key, None)
+
+    def _cache_put(self, path: Path, pil_image: Image.Image, image_data: ImageDataReader):
+        key = self._normalize_path_key(path)
+        self._image_cache[key] = (pil_image, image_data)
+        self._image_cache.move_to_end(key)
+        while len(self._image_cache) > self._image_cache_max:
+            self._image_cache.popitem(last=False)
+
+    def _cache_get(self, path: Path):
+        key = self._normalize_path_key(path)
+        if key not in self._image_cache:
+            return None
+        value = self._image_cache[key]
+        self._image_cache.move_to_end(key)
+        return value
+
+    def _start_image_loader(self):
+        def loader_loop():
+            while True:
+                self._image_load_event.wait()
+                self._image_load_event.clear()
+                with self._image_load_lock:
+                    requested_path = self._image_load_requested_path
+                    requested_max_dim = self._image_load_requested_max_dim
+                    request_id = self._image_load_request_id
+
+                if requested_path is None:
+                    continue
+
+                cached = self._cache_get(requested_path)
+                if cached is not None:
+                    pil_image, image_data = cached
+                    self.after(
+                        0,
+                        lambda: self._apply_loaded_image(
+                            request_id, requested_path, pil_image, image_data
+                        ),
+                    )
+                    continue
+
+                pil_image = None
+                image_data = None
+                load_error = None
+
+                try:
+                    image_data = ImageDataReader(str(requested_path))
+                    with Image.open(requested_path) as img:
+                        if requested_max_dim is not None:
+                            try:
+                                img.draft("RGB", (requested_max_dim, requested_max_dim))
+                            except Exception:
+                                pass
+                        img.load()
+                        if requested_max_dim is not None:
+                            img.thumbnail(
+                                (requested_max_dim, requested_max_dim),
+                                Image.Resampling.LANCZOS,
+                            )
+                        pil_image = img.copy()
+                except Exception as e:
+                    load_error = e
+
+                self.after(
+                    0,
+                    lambda: self._apply_loaded_image(
+                        request_id,
+                        requested_path,
+                        pil_image,
+                        image_data,
+                        load_error=load_error,
+                    ),
+                )
+
+        threading.Thread(target=loader_loop, daemon=True).start()
+
+    def _request_image_load(self, image_path: Path):
+        max_dim = max(self.image_label.winfo_width(), self.image_frame.winfo_height())
+        if max_dim <= 2:
+            max_dim = 1200
+        else:
+            max_dim = max(800, int(max_dim * 2))
+        with self._image_load_lock:
+            self._image_load_request_id += 1
+            self._image_load_requested_path = image_path
+            self._image_load_requested_max_dim = max_dim
+            request_id = self._image_load_request_id
+        self._image_load_event.set()
+        return request_id
+
+    def _apply_loaded_image(
+        self,
+        request_id: int,
+        image_path: Path,
+        pil_image: Image.Image,
+        image_data: ImageDataReader,
+        load_error=None,
+    ):
+        with self._image_load_lock:
+            if request_id != self._image_load_request_id:
+                return
+
+        if self.file_path is None or self._normalize_path_key(self.file_path) != self._normalize_path_key(image_path):
+            return
+
+        if load_error is not None or pil_image is None or image_data is None:
+            self.unsupported_format([None, "Failed to load image"], reset_image=True)
+            return
+
+        self.image_data = image_data
+        if not self.image_data.tool or self.image_data.status.name == "FORMAT_ERROR":
+            self.unsupported_format(MESSAGE["format_error"])
+            return
+        if self.image_data.status.name == "COMFYUI_ERROR":
+            self.unsupported_format(MESSAGE["comfyui_error"], url=URL["comfyui"], raw=True)
+            return
+
+        self.readable = True
+        if not self.image_data.is_sdxl:
+            self.positive_box.display(self.image_data.positive)
+            self.negative_box.display(self.image_data.negative)
+        else:
+            self.positive_box.display(self.image_data.positive_sdxl)
+            self.negative_box.display(self.image_data.negative_sdxl)
+
+        self.setting_box.text = self.image_data.setting
+        self.setting_box_parameter.update_text(self.image_data.parameter)
+        self.positive_box.mode_update()
+        self.negative_box.mode_update()
+
+        if self.button_edit.mode == EditMode.OFF:
+            for button in self.function_buttons:
+                button.enable()
+            self.positive_box.all_on()
+            self.negative_box.all_on()
+
+        for button in self.edit_buttons:
+            button.enable()
+        self.positive_box.copy_on()
+        self.negative_box.copy_on()
+
+        if self.image_data.tool != "A1111 webUI":
+            self.button_raw_option_arrow.disable()
+        if self.image_data.is_sdxl:
+            self.button_edit.disable()
+
+        self.status_bar.success(self.image_data.tool)
+        self.image = pil_image
+        self.image_tk = CTkImage(self.image)
+        self.resize_image()
+
+        if self.button_edit.mode == EditMode.ON:
+            self.edit_mode_update()
+
+        self.update_image_navigation_state()
+        self._cache_put(image_path, pil_image, image_data)
 
     def update_image_navigation_state(self):
         has_prev = (
