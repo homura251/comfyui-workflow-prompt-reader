@@ -154,6 +154,7 @@ class App(Tk):
         self._image_sequence_dir_key = None
         self._image_sequence_scan_id = 0
         self._image_sequence_scanning = False
+        self._image_sequence_sort_by_time = False
 
         self._image_cache = OrderedDict()
         self._image_cache_max = 6
@@ -191,6 +192,21 @@ class App(Tk):
             pady=(0, 20),
             ipadx=STATUS_BAR_IPAD,
             ipady=STATUS_BAR_IPAD,
+        )
+        self.button_image_sort = STkButton(
+            self.status_bar.status_frame,
+            width=BUTTON_WIDTH_S,
+            height=BUTTON_HEIGHT_S,
+            image=self.sort_image,
+            text="",
+            command=self.toggle_image_sort_mode,
+        )
+        self.button_image_sort.switch_off()
+        self.button_image_sort.pack(side="right", padx=(0, 4))
+        self.button_image_sort_tooltip = CTkToolTip(
+            self.button_image_sort,
+            delay=TOOLTIP_DELAY,
+            message=TOOLTIP["img_sort"],
         )
 
         # textbox
@@ -896,6 +912,25 @@ class App(Tk):
     def _normalize_path_key(path: Path):
         return os.path.normcase(os.path.abspath(str(path)))
 
+    @staticmethod
+    def _safe_mtime(path: Path) -> float:
+        try:
+            return path.stat().st_mtime
+        except Exception:
+            return 0.0
+
+    def toggle_image_sort_mode(self):
+        self._image_sequence_sort_by_time = not self._image_sequence_sort_by_time
+        if self._image_sequence_sort_by_time:
+            self.button_image_sort.switch_on()
+            self.status_bar.info(MESSAGE["img_sort"][1])
+        else:
+            self.button_image_sort.switch_off()
+            self.status_bar.info(MESSAGE["img_sort"][0])
+
+        if self.file_path is not None:
+            self._start_image_sequence_scan(self.file_path.parent)
+
     def refresh_image_sequence(self, current_path: Path):
         directory = current_path.parent
         directory_key = self._normalize_path_key(directory)
@@ -918,24 +953,44 @@ class App(Tk):
         self._image_sequence_scan_id += 1
         scan_id = self._image_sequence_scan_id
         self._image_sequence_scanning = True
+        sort_by_time = self._image_sequence_sort_by_time
 
         def worker():
             candidates = []
             index_by_key = {}
             try:
-                for entry in os.scandir(directory):
-                    if not entry.is_file():
-                        continue
-                    suffix = os.path.splitext(entry.name)[1].lower()
-                    if suffix in SUPPORTED_FORMATS:
-                        candidates.append(Path(entry.path))
-                candidates.sort(key=lambda p: p.name.casefold())
-                index_by_key = {
-                    self._normalize_path_key(p): i for i, p in enumerate(candidates)
-                }
+                with os.scandir(directory) as it:
+                    for entry in it:
+                        try:
+                            if not entry.is_file():
+                                continue
+                            suffix = os.path.splitext(entry.name)[1].lower()
+                            if suffix not in SUPPORTED_FORMATS:
+                                continue
+                            candidates.append(Path(entry.path))
+                        except Exception:
+                            continue
             except Exception:
                 candidates = []
-                index_by_key = {}
+
+            try:
+                if sort_by_time:
+                    candidates.sort(
+                        key=lambda p: (-self._safe_mtime(p), p.name.casefold())
+                    )
+                else:
+                    candidates.sort(key=lambda p: p.name.casefold())
+            except Exception:
+                try:
+                    candidates.sort(key=lambda p: p.name.casefold())
+                except Exception:
+                    candidates = []
+
+            for i, p in enumerate(candidates):
+                try:
+                    index_by_key[self._normalize_path_key(p)] = i
+                except Exception:
+                    continue
 
             self.after(
                 0,
@@ -1577,7 +1632,7 @@ class App(Tk):
         return filedialog.askopenfilename(
             title="Select your image file",
             initialdir=initialdir,
-            filetypes=(("image files", "*.png *.jpg *jpeg *.webp"),),
+            filetypes=(("image files", "*.png *.jpg *.jpeg *.webp"),),
         )
 
     @staticmethod

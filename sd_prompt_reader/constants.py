@@ -80,6 +80,7 @@ MESSAGE = {
     "txt_imported": ["The TXT file has been successfully imported"],
     "edit": ["Edit mode", "View mode"],
     "sort": ["Ascending order", "Descending order", "Original order"],
+    "img_sort": ["Sort images by filename", "Sort images by modified time (newest first)"],
     "view_prompt": ["Vertical orientation", "Horizontal orientation"],
     "view_setting": ["Simple mode", "Normal mode"],
     "comfyui_error": [
@@ -96,6 +97,7 @@ TOOLTIP = {
     "copy_prompt": "Copy prompt to the clipboard",
     "copy_setting": "Copy setting to the clipboard",
     "sort": "Sort prompt lines in ascending or descending order",
+    "img_sort": "Toggle image navigation order (filename/modified time, newest first)",
     "view_prompt": "View prompt in vertical orientation",
     "view_setting": "View setting in simple mode",
     "view_separate": "View Clip G, Clip L and Refiner prompt in separate textbox",
