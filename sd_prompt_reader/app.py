@@ -119,11 +119,12 @@ class App(Tk):
         self._canvas_placeholder_image_item = self.image_canvas.create_image(
             0, 0, image=self._placeholder_photo, anchor="center"
         )
+        placeholder_text_color = self._apply_appearance_mode(ACCESSIBLE_GRAY)
         self._canvas_placeholder_text_item = self.image_canvas.create_text(
             0,
             0,
             text="\n" + VERSION + "\n\n" + MESSAGE["drop"][0],
-            fill=ACCESSIBLE_GRAY[0] if isinstance(ACCESSIBLE_GRAY, tuple) else ACCESSIBLE_GRAY,
+            fill=placeholder_text_color,
             justify="center",
         )
 
@@ -135,6 +136,16 @@ class App(Tk):
         )
         self.image_canvas.itemconfigure(self._canvas_nav_prev_item, state="hidden")
         self.image_canvas.itemconfigure(self._canvas_nav_next_item, state="hidden")
+
+        self._nav_icon_base_size = 36
+        self._nav_icon_base_margin = 18
+
+        try:
+            self.image_canvas.configure(
+                bg=self._apply_appearance_mode(ThemeManager.theme["CTkFrame"]["fg_color"])
+            )
+        except Exception:
+            pass
 
         # image navigation (previous/next)
         self._image_sequence = []
@@ -628,6 +639,13 @@ class App(Tk):
         if canvas_w <= 2 or canvas_h <= 2:
             return
 
+        try:
+            canvas_bg = self._apply_appearance_mode(ThemeManager.theme["CTkFrame"]["fg_color"])
+        except Exception:
+            canvas_bg = self.image_frame.cget("fg_color")
+            canvas_bg = self._apply_appearance_mode(canvas_bg) if isinstance(canvas_bg, (tuple, list)) else canvas_bg
+        self.image_canvas.configure(bg=canvas_bg)
+
         center_x = int(canvas_w / 2)
         center_y = int(canvas_h / 2)
 
@@ -645,6 +663,10 @@ class App(Tk):
             )
             self.image_canvas.coords(
                 self._canvas_placeholder_text_item, center_x, center_y + 70
+            )
+            self.image_canvas.itemconfigure(
+                self._canvas_placeholder_text_item,
+                fill=self._apply_appearance_mode(ACCESSIBLE_GRAY),
             )
             self.image_canvas.itemconfigure(self._canvas_nav_prev_item, state="hidden")
             self.image_canvas.itemconfigure(self._canvas_nav_next_item, state="hidden")
@@ -740,21 +762,32 @@ class App(Tk):
             self.image_canvas.itemconfigure(self._canvas_nav_next_item, state="hidden")
             return
 
-        left, top, width, height = self._canvas_image_box
-        icon_size = min(60, max(32, int(min(width, height) * 0.10)))
-        margin = min(32, max(14, int(icon_size * 0.35)))
-        y = int(top + height / 2)
+        canvas_w = self.image_canvas.winfo_width()
+        canvas_h = self.image_canvas.winfo_height()
+        if canvas_w <= 2 or canvas_h <= 2:
+            return
+
+        # Keep icon size/position stable across image changes.
+        icon_size = int(round(self._nav_icon_base_size * self.scaling)) if self.scaling else self._nav_icon_base_size
+        margin = int(round(self._nav_icon_base_margin * self.scaling)) if self.scaling else self._nav_icon_base_margin
+        icon_size = max(24, icon_size)
+        margin = max(10, margin)
+        y = int(canvas_h / 2)
 
         prev_photo = self._get_nav_icon_photo("prev", icon_size, self._nav_prev_enabled)
         next_photo = self._get_nav_icon_photo("next", icon_size, self._nav_next_enabled)
 
-        x_prev = int(left + margin + icon_size / 2)
-        x_next = int(left + width - margin - icon_size / 2)
+        x_prev = int(margin + icon_size / 2)
+        x_next = int(canvas_w - margin - icon_size / 2)
 
         self.image_canvas.coords(self._canvas_nav_prev_item, x_prev, y)
         self.image_canvas.coords(self._canvas_nav_next_item, x_next, y)
-        self.image_canvas.itemconfigure(self._canvas_nav_prev_item, image=prev_photo, state="normal")
-        self.image_canvas.itemconfigure(self._canvas_nav_next_item, image=next_photo, state="normal")
+        self.image_canvas.itemconfigure(
+            self._canvas_nav_prev_item, image=prev_photo, state="normal"
+        )
+        self.image_canvas.itemconfigure(
+            self._canvas_nav_next_item, image=next_photo, state="normal"
+        )
         self.image_canvas.tag_raise(self._canvas_nav_prev_item)
         self.image_canvas.tag_raise(self._canvas_nav_next_item)
 

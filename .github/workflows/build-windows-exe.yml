@@ -42,21 +42,19 @@ jobs:
         run: |
           python setup.py
 
-      - name: Package
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          Compress-Archive -Path dist\* -DestinationPath sd-prompt-reader-windows.zip -Force
-
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: sd-prompt-reader-windows-${{ github.run_number }}-${{ github.sha }}
-          path: sd-prompt-reader-windows.zip
+          path: |
+            dist/SD Prompt Reader.exe
+            dist/SD Prompt Reader CLI.exe
 
       - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: sd-prompt-reader-windows.zip
+          files: |
+            dist/SD Prompt Reader.exe
+            dist/SD Prompt Reader CLI.exe
           generate_release_notes: true
