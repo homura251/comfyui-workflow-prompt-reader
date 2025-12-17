@@ -9,11 +9,11 @@ import os
 import threading
 from collections import OrderedDict
 import xml.etree.ElementTree as ET
-from tkinter import PhotoImage, Menu
+from tkinter import PhotoImage, Menu, Canvas
 
 import pyperclip as pyperclip
 from CTkToolTip import *
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageTk
 from customtkinter import (
     ScalingTracker,
     CTkButton,
@@ -96,18 +96,45 @@ class App(Tk):
             row=0, column=0, rowspan=4, sticky="news", padx=20, pady=20
         )
 
-        self.image_label = CTkLabel(
-            self.image_frame,
-            width=560,
-            text="\n" + VERSION + "\n\n" + MESSAGE["drop"][0],
-            image=self.icon_cube_image,
-            compound="top",
-            text_color=ACCESSIBLE_GRAY,
+        self.image_canvas = Canvas(self.image_frame, highlightthickness=0, bd=0)
+        self.image_canvas.pack(fill="both", expand=True)
+        self.image_canvas.bind("<Button-1>", self.on_canvas_click)
+        self.image_canvas.bind("<Motion>", self.on_canvas_motion)
+        self.image_canvas.bind("<Leave>", self.on_canvas_leave)
+        self.image_canvas.bind("<Configure>", self.resize_image)
+
+        self._canvas_render_after_id = None
+        self._hq_render_after_id = None
+        self._prefer_fast_render = False
+        self._canvas_photo = None
+        self._canvas_image_item = None
+        self._canvas_image_box = None
+
+        self._transparent_pixel = ImageTk.PhotoImage(
+            Image.new("RGBA", (1, 1), (0, 0, 0, 0))
         )
-        self.image_label.pack(fill="both", expand=True)
-        self.image_label.bind("<Button-1>", self.on_image_click)
-        self.image_label.bind("<Motion>", self.on_image_motion)
-        self.image_label.bind("<Leave>", self.on_image_leave)
+        placeholder_pil = Image.open(ICON_CUBE_FILE).convert("RGBA")
+        placeholder_pil.thumbnail((100, 100), Image.Resampling.LANCZOS)
+        self._placeholder_photo = ImageTk.PhotoImage(placeholder_pil)
+        self._canvas_placeholder_image_item = self.image_canvas.create_image(
+            0, 0, image=self._placeholder_photo, anchor="center"
+        )
+        self._canvas_placeholder_text_item = self.image_canvas.create_text(
+            0,
+            0,
+            text="\n" + VERSION + "\n\n" + MESSAGE["drop"][0],
+            fill=ACCESSIBLE_GRAY[0] if isinstance(ACCESSIBLE_GRAY, tuple) else ACCESSIBLE_GRAY,
+            justify="center",
+        )
+
+        self._canvas_nav_prev_item = self.image_canvas.create_image(
+            0, 0, image=self._transparent_pixel, anchor="center", tags=("nav_prev",)
+        )
+        self._canvas_nav_next_item = self.image_canvas.create_image(
+            0, 0, image=self._transparent_pixel, anchor="center", tags=("nav_next",)
+        )
+        self.image_canvas.itemconfigure(self._canvas_nav_prev_item, state="hidden")
+        self.image_canvas.itemconfigure(self._canvas_nav_next_item, state="hidden")
 
         # image navigation (previous/next)
         self._image_sequence = []
@@ -126,13 +153,11 @@ class App(Tk):
         self._image_load_requested_max_dim = None
         self._image_load_request_id = 0
 
-        # navigation icons are rendered onto the displayed image (no widget background)
+        # navigation icons are rendered as canvas overlay items (no widget background)
         self._nav_prev_svg = Path(RESOURCE_DIR, "nav_prev.svg")
         self._nav_next_svg = Path(RESOURCE_DIR, "nav_next.svg")
         self._nav_prev_enabled = False
         self._nav_next_enabled = False
-        self._nav_prev_bbox = None
-        self._nav_next_bbox = None
         self._nav_icon_cache = {}
         self._metadata_after_id = None
 
@@ -501,7 +526,6 @@ class App(Tk):
         # bind dnd and resize
         self.drop_target_register(DND_FILES)
         self.dnd_bind("<<Drop>>", self.display_info)
-        self.bind("<Configure>", self.resize_image)
         self.bind_all("<Left>", self.on_prev_image_key, add="+")
         self.bind_all("<Right>", self.on_next_image_key, add="+")
         self.update_image_navigation_state()
@@ -573,8 +597,7 @@ class App(Tk):
         self.positive_box.all_off()
         self.negative_box.all_off()
         if reset_image:
-            self.image_label.configure(image=self.drop_image, text=MESSAGE["drop"][0])
-            self.image = None
+            self._show_placeholder()
             self.clear_image_sequence()
         else:
             self.button_edit.enable()
@@ -586,43 +609,90 @@ class App(Tk):
             self.button_export.enable()
 
     def resize_image(self, event=None):
-        # resize image to window size
-        if self.image:
-            aspect_ratio = self.image.size[0] / self.image.size[1]
-            # fix windows huge image problem under hidpi
-            self.scaling = ScalingTracker.get_window_dpi_scaling(self)
+        if self._canvas_render_after_id is not None:
+            try:
+                self.after_cancel(self._canvas_render_after_id)
+            except Exception:
+                pass
+            self._canvas_render_after_id = None
 
-            label_w_px = (
-                self.image_label.winfo_width() if self.image_label.winfo_width() > 2 else 560
+        # Debounce resize events to reduce UI stutter.
+        delay_ms = 40 if event is not None else 0
+        self._canvas_render_after_id = self.after(delay_ms, self._render_canvas)
+
+    def _render_canvas(self):
+        self._canvas_render_after_id = None
+
+        canvas_w = self.image_canvas.winfo_width()
+        canvas_h = self.image_canvas.winfo_height()
+        if canvas_w <= 2 or canvas_h <= 2:
+            return
+
+        center_x = int(canvas_w / 2)
+        center_y = int(canvas_h / 2)
+
+        if self.image is None:
+            if self._canvas_image_item is not None:
+                self.image_canvas.itemconfigure(self._canvas_image_item, state="hidden")
+            self.image_canvas.itemconfigure(
+                self._canvas_placeholder_image_item, state="normal"
             )
-            label_h_px = (
-                self.image_label.winfo_height() if self.image_label.winfo_height() > 2 else 560
+            self.image_canvas.itemconfigure(
+                self._canvas_placeholder_text_item, state="normal"
             )
-            available_w_px = max(1, label_w_px - 5)
-            available_h_px = max(1, label_h_px)
+            self.image_canvas.coords(
+                self._canvas_placeholder_image_item, center_x, center_y - 40
+            )
+            self.image_canvas.coords(
+                self._canvas_placeholder_text_item, center_x, center_y + 70
+            )
+            self.image_canvas.itemconfigure(self._canvas_nav_prev_item, state="hidden")
+            self.image_canvas.itemconfigure(self._canvas_nav_next_item, state="hidden")
+            self._canvas_image_box = None
+            return
 
-            if available_w_px / available_h_px > aspect_ratio:
-                target_h_px = available_h_px
-                target_w_px = int(target_h_px * aspect_ratio)
-            else:
-                target_w_px = available_w_px
-                target_h_px = int(target_w_px / aspect_ratio)
+        # Keep canvas image scaling in sync with DPI scaling.
+        self.scaling = ScalingTracker.get_window_dpi_scaling(self)
 
-            target_w = max(1, int(target_w_px / self.scaling))
-            target_h = max(1, int(target_h_px / self.scaling))
-            target_w_px = max(1, int(target_w * self.scaling))
-            target_h_px = max(1, int(target_h * self.scaling))
+        self.image_canvas.itemconfigure(self._canvas_placeholder_image_item, state="hidden")
+        self.image_canvas.itemconfigure(self._canvas_placeholder_text_item, state="hidden")
 
-            resized = self.image.resize(
-                (target_w_px, target_h_px), Image.Resampling.LANCZOS
-            ).convert("RGBA")
-            self._draw_nav_overlay(resized, label_w_px, label_h_px, target_w_px, target_h_px)
-
-            self.image_tk = CTkImage(resized, size=(target_w, target_h))
-            self.image_label.configure(image=self.image_tk, text="")
+        aspect_ratio = self.image.size[0] / self.image.size[1]
+        if canvas_w / canvas_h > aspect_ratio:
+            target_h = canvas_h
+            target_w = max(1, int(target_h * aspect_ratio))
         else:
-            self._nav_prev_bbox = None
-            self._nav_next_bbox = None
+            target_w = canvas_w
+            target_h = max(1, int(target_w / aspect_ratio))
+
+        resample = (
+            Image.Resampling.BILINEAR
+            if self._prefer_fast_render
+            else Image.Resampling.LANCZOS
+        )
+        resized = self.image.resize((target_w, target_h), resample)
+        self._canvas_photo = ImageTk.PhotoImage(resized)
+
+        if self._canvas_image_item is None:
+            self._canvas_image_item = self.image_canvas.create_image(
+                center_x, center_y, image=self._canvas_photo, anchor="center", tags=("image",)
+            )
+        else:
+            self.image_canvas.itemconfigure(
+                self._canvas_image_item, image=self._canvas_photo, state="normal"
+            )
+            self.image_canvas.coords(self._canvas_image_item, center_x, center_y)
+
+        left = int(center_x - target_w / 2)
+        top = int(center_y - target_h / 2)
+        self._canvas_image_box = (left, top, target_w, target_h)
+
+        self._update_nav_canvas_items()
+
+    def _enable_high_quality_render(self):
+        self._hq_render_after_id = None
+        self._prefer_fast_render = False
+        self.resize_image()
 
     def _prepare_loading_state(self):
         self.readable = False
@@ -639,6 +709,141 @@ class App(Tk):
         self.button_save.disable()
         self.button_edit.disable()
         self.status_bar.info("Loading...")
+
+    def _show_placeholder(self):
+        self.image = None
+        self._prefer_fast_render = False
+        if self._hq_render_after_id is not None:
+            try:
+                self.after_cancel(self._hq_render_after_id)
+            except Exception:
+                pass
+            self._hq_render_after_id = None
+        self._canvas_photo = None
+        self._canvas_image_box = None
+        if self._canvas_image_item is not None:
+            self.image_canvas.itemconfigure(self._canvas_image_item, state="hidden")
+        self.image_canvas.itemconfigure(self._canvas_placeholder_image_item, state="normal")
+        self.image_canvas.itemconfigure(self._canvas_placeholder_text_item, state="normal")
+        self.image_canvas.itemconfigure(self._canvas_nav_prev_item, state="hidden")
+        self.image_canvas.itemconfigure(self._canvas_nav_next_item, state="hidden")
+        self.resize_image()
+
+    def _update_nav_canvas_items(self):
+        if self._canvas_image_box is None:
+            self.image_canvas.itemconfigure(self._canvas_nav_prev_item, state="hidden")
+            self.image_canvas.itemconfigure(self._canvas_nav_next_item, state="hidden")
+            return
+
+        if self._image_sequence_index is None or len(self._image_sequence) < 2:
+            self.image_canvas.itemconfigure(self._canvas_nav_prev_item, state="hidden")
+            self.image_canvas.itemconfigure(self._canvas_nav_next_item, state="hidden")
+            return
+
+        left, top, width, height = self._canvas_image_box
+        icon_size = min(60, max(32, int(min(width, height) * 0.10)))
+        margin = min(32, max(14, int(icon_size * 0.35)))
+        y = int(top + height / 2)
+
+        prev_photo = self._get_nav_icon_photo("prev", icon_size, self._nav_prev_enabled)
+        next_photo = self._get_nav_icon_photo("next", icon_size, self._nav_next_enabled)
+
+        x_prev = int(left + margin + icon_size / 2)
+        x_next = int(left + width - margin - icon_size / 2)
+
+        self.image_canvas.coords(self._canvas_nav_prev_item, x_prev, y)
+        self.image_canvas.coords(self._canvas_nav_next_item, x_next, y)
+        self.image_canvas.itemconfigure(self._canvas_nav_prev_item, image=prev_photo, state="normal")
+        self.image_canvas.itemconfigure(self._canvas_nav_next_item, image=next_photo, state="normal")
+        self.image_canvas.tag_raise(self._canvas_nav_prev_item)
+        self.image_canvas.tag_raise(self._canvas_nav_next_item)
+
+    def _get_nav_icon_photo(self, direction: str, size_px: int, enabled: bool):
+        key = (direction, int(size_px), bool(enabled))
+        cached = self._nav_icon_cache.get(key)
+        if cached is not None:
+            return cached
+
+        svg_path = self._nav_prev_svg if direction == "prev" else self._nav_next_svg
+        render_scale = 4
+        render_size = max(24, int(size_px) * render_scale)
+
+        try:
+            root = ET.parse(svg_path).getroot()
+        except Exception:
+            img = ImageTk.PhotoImage(Image.new("RGBA", (size_px, size_px), (0, 0, 0, 0)))
+            self._nav_icon_cache[key] = img
+            return img
+
+        view_box = root.attrib.get("viewBox", "0 0 24 24").strip().split()
+        vb_w = float(view_box[2]) if len(view_box) == 4 else 24.0
+        vb_h = float(view_box[3]) if len(view_box) == 4 else 24.0
+        scale = render_size / max(vb_w, vb_h)
+
+        img = Image.new("RGBA", (render_size, render_size), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(img)
+
+        alpha = 240 if enabled else 90
+        shadow_alpha = 160 if enabled else 55
+        stroke = (255, 255, 255, alpha)
+        shadow = (0, 0, 0, shadow_alpha)
+        stroke_width = max(2, int(2.2 * render_scale))
+        shadow_offset = max(1, int(1.2 * render_scale))
+
+        circles = []
+        polygons = []
+        for el in root.iter():
+            tag = el.tag.split("}")[-1]
+            if tag == "circle":
+                try:
+                    circles.append(
+                        (
+                            float(el.attrib.get("cx")),
+                            float(el.attrib.get("cy")),
+                            float(el.attrib.get("r")),
+                        )
+                    )
+                except Exception:
+                    continue
+            elif tag == "polygon":
+                pts_raw = el.attrib.get("points", "").strip()
+                if not pts_raw:
+                    continue
+                parts = pts_raw.replace(",", " ").split()
+                if len(parts) % 2 != 0:
+                    continue
+                coords = []
+                try:
+                    for i in range(0, len(parts), 2):
+                        coords.append((float(parts[i]), float(parts[i + 1])))
+                    polygons.append(coords)
+                except Exception:
+                    continue
+
+        def draw_circle(cx, cy, r, color, offset=0):
+            x0 = (cx - r) * scale + offset
+            y0 = (cy - r) * scale + offset
+            x1 = (cx + r) * scale + offset
+            y1 = (cy + r) * scale + offset
+            draw.ellipse((x0, y0, x1, y1), outline=color, width=stroke_width)
+
+        def draw_polygon(points, color, offset=0):
+            pts = [(x * scale + offset, y * scale + offset) for x, y in points]
+            draw.polygon(pts, fill=color)
+
+        for cx, cy, r in circles:
+            draw_circle(cx, cy, r, shadow, offset=shadow_offset)
+        for pts in polygons:
+            draw_polygon(pts, shadow, offset=shadow_offset)
+        for cx, cy, r in circles:
+            draw_circle(cx, cy, r, stroke, offset=0)
+        for pts in polygons:
+            draw_polygon(pts, stroke, offset=0)
+
+        img = img.resize((int(size_px), int(size_px)), Image.Resampling.LANCZOS)
+        photo = ImageTk.PhotoImage(img)
+        self._nav_icon_cache[key] = photo
+        return photo
 
     @staticmethod
     def _normalize_path_key(path: Path):
@@ -802,7 +1007,7 @@ class App(Tk):
         threading.Thread(target=loader_loop, daemon=True).start()
 
     def _request_image_load(self, image_path: Path):
-        max_dim = max(self.image_label.winfo_width(), self.image_frame.winfo_height())
+        max_dim = max(self.image_canvas.winfo_width(), self.image_canvas.winfo_height())
         if max_dim <= 2:
             max_dim = 1200
         else:
@@ -835,7 +1040,15 @@ class App(Tk):
             return
 
         self.image = pil_image
+        self._prefer_fast_render = True
+        if self._hq_render_after_id is not None:
+            try:
+                self.after_cancel(self._hq_render_after_id)
+            except Exception:
+                pass
+            self._hq_render_after_id = None
         self.resize_image()
+        self._hq_render_after_id = self.after(250, self._enable_high_quality_render)
 
         self.image_data = image_data
         self._cache_put(image_path, pil_image, image_data)
@@ -856,7 +1069,7 @@ class App(Tk):
 
         # Avoid stutter when rapidly paging; apply metadata only after a short pause.
         self._metadata_after_id = self.after(
-            180, lambda: self._apply_loaded_metadata(request_id, image_path)
+            450, lambda: self._apply_loaded_metadata(request_id, image_path)
         )
 
     def _apply_loaded_metadata(self, request_id: int, image_path: Path):
@@ -960,8 +1173,7 @@ class App(Tk):
         if has_prev != self._nav_prev_enabled or has_next != self._nav_next_enabled:
             self._nav_prev_enabled = has_prev
             self._nav_next_enabled = has_next
-            if self.image:
-                self.resize_image()
+            self._update_nav_canvas_items()
 
     def _navigation_key_should_trigger(self):
         focused = self.focus_get()
@@ -990,186 +1202,33 @@ class App(Tk):
             return
         self.display_info(str(self._image_sequence[new_index]), is_selected=True)
 
-    def on_image_click(self, event):
-        if self.image is None:
-            self.display_info(self.select_image(), is_selected=True)
-            return
-
-        if (
-            self._nav_prev_enabled
-            and self._nav_prev_bbox
-            and self._point_in_bbox(event.x, event.y, self._nav_prev_bbox)
-        ):
-            self.navigate_image(-1)
-            return
-
-        if (
-            self._nav_next_enabled
-            and self._nav_next_bbox
-            and self._point_in_bbox(event.x, event.y, self._nav_next_bbox)
-        ):
-            self.navigate_image(1)
-            return
+    def on_canvas_click(self, event):
+        current = self.image_canvas.find_withtag("current")
+        if current:
+            tags = self.image_canvas.gettags(current[0])
+            if "nav_prev" in tags and self._nav_prev_enabled:
+                self.navigate_image(-1)
+                return
+            if "nav_next" in tags and self._nav_next_enabled:
+                self.navigate_image(1)
+                return
 
         self.display_info(self.select_image(), is_selected=True)
 
-    def on_image_motion(self, event):
-        is_nav = False
-        if (
-            self._nav_prev_enabled
-            and self._nav_prev_bbox
-            and self._point_in_bbox(event.x, event.y, self._nav_prev_bbox)
-        ):
-            is_nav = True
-        elif (
-            self._nav_next_enabled
-            and self._nav_next_bbox
-            and self._point_in_bbox(event.x, event.y, self._nav_next_bbox)
-        ):
-            is_nav = True
-        self.image_label.configure(cursor="hand2" if is_nav else "")
+    def on_canvas_motion(self, event):
+        current = self.image_canvas.find_withtag("current")
+        if current:
+            tags = self.image_canvas.gettags(current[0])
+            if "nav_prev" in tags and self._nav_prev_enabled:
+                self.image_canvas.configure(cursor="hand2")
+                return
+            if "nav_next" in tags and self._nav_next_enabled:
+                self.image_canvas.configure(cursor="hand2")
+                return
+        self.image_canvas.configure(cursor="")
 
-    def on_image_leave(self, event):
-        self.image_label.configure(cursor="")
-
-    @staticmethod
-    def _point_in_bbox(x: int, y: int, bbox):
-        x0, y0, x1, y1 = bbox
-        return x0 <= x <= x1 and y0 <= y <= y1
-
-    def _draw_nav_overlay(
-        self,
-        image_rgba: Image.Image,
-        label_w_px: int,
-        label_h_px: int,
-        image_w_px: int,
-        image_h_px: int,
-    ):
-        self._nav_prev_bbox = None
-        self._nav_next_bbox = None
-
-        icon_size_px = min(60, max(34, int(min(image_w_px, image_h_px) * 0.085)))
-        margin_px = min(32, max(14, int(icon_size_px * 0.35)))
-
-        offset_x = int((label_w_px - image_w_px) / 2)
-        offset_y = int((label_h_px - image_h_px) / 2)
-        y = offset_y + int((image_h_px - icon_size_px) / 2)
-
-        x_prev = offset_x + margin_px
-        x_next = offset_x + image_w_px - margin_px - icon_size_px
-
-        y_img = max(0, int((image_h_px - icon_size_px) / 2))
-        x_prev_img = max(0, margin_px)
-        x_next_img = max(0, image_w_px - margin_px - icon_size_px)
-
-        prev_icon = self._render_svg_nav_icon(
-            "prev", icon_size_px, enabled=self._nav_prev_enabled
-        )
-        next_icon = self._render_svg_nav_icon(
-            "next", icon_size_px, enabled=self._nav_next_enabled
-        )
-
-        image_rgba.alpha_composite(prev_icon, dest=(x_prev_img, y_img))
-        image_rgba.alpha_composite(next_icon, dest=(x_next_img, y_img))
-
-        self._nav_prev_bbox = (
-            x_prev,
-            y,
-            x_prev + icon_size_px,
-            y + icon_size_px,
-        )
-        self._nav_next_bbox = (
-            x_next,
-            y,
-            x_next + icon_size_px,
-            y + icon_size_px,
-        )
-
-    def _render_svg_nav_icon(self, direction: str, size_px: int, enabled: bool):
-        key = (direction, size_px, enabled)
-        cached = self._nav_icon_cache.get(key)
-        if cached is not None:
-            return cached
-
-        svg_path = self._nav_prev_svg if direction == "prev" else self._nav_next_svg
-        render_scale = 4
-        render_size = max(24, size_px * render_scale)
-
-        try:
-            root = ET.parse(svg_path).getroot()
-        except Exception:
-            img = Image.new("RGBA", (size_px, size_px), (0, 0, 0, 0))
-            self._nav_icon_cache[key] = img
-            return img
-
-        view_box = root.attrib.get("viewBox", "0 0 24 24").strip().split()
-        vb_w = float(view_box[2]) if len(view_box) == 4 else 24.0
-        vb_h = float(view_box[3]) if len(view_box) == 4 else 24.0
-        scale = render_size / max(vb_w, vb_h)
-
-        img = Image.new("RGBA", (render_size, render_size), (0, 0, 0, 0))
-        draw = ImageDraw.Draw(img)
-
-        alpha = 235 if enabled else 90
-        shadow_alpha = 150 if enabled else 55
-        stroke = (255, 255, 255, alpha)
-        shadow = (0, 0, 0, shadow_alpha)
-        stroke_width = max(2, int(2.2 * render_scale))
-        shadow_offset = max(1, int(1.2 * render_scale))
-
-        circles = []
-        polygons = []
-        for el in root.iter():
-            tag = el.tag.split("}")[-1]
-            if tag == "circle":
-                try:
-                    circles.append(
-                        (
-                            float(el.attrib.get("cx")),
-                            float(el.attrib.get("cy")),
-                            float(el.attrib.get("r")),
-                        )
-                    )
-                except Exception:
-                    continue
-            elif tag == "polygon":
-                pts_raw = el.attrib.get("points", "").strip()
-                if not pts_raw:
-                    continue
-                parts = pts_raw.replace(",", " ").split()
-                if len(parts) % 2 != 0:
-                    continue
-                coords = []
-                try:
-                    for i in range(0, len(parts), 2):
-                        coords.append((float(parts[i]), float(parts[i + 1])))
-                    polygons.append(coords)
-                except Exception:
-                    continue
-
-        def draw_circle(cx, cy, r, color, offset=0):
-            x0 = (cx - r) * scale + offset
-            y0 = (cy - r) * scale + offset
-            x1 = (cx + r) * scale + offset
-            y1 = (cy + r) * scale + offset
-            draw.ellipse((x0, y0, x1, y1), outline=color, width=stroke_width)
-
-        def draw_polygon(points, color, offset=0):
-            pts = [(x * scale + offset, y * scale + offset) for x, y in points]
-            draw.polygon(pts, fill=color)
-
-        for cx, cy, r in circles:
-            draw_circle(cx, cy, r, shadow, offset=shadow_offset)
-        for pts in polygons:
-            draw_polygon(pts, shadow, offset=shadow_offset)
-        for cx, cy, r in circles:
-            draw_circle(cx, cy, r, stroke, offset=0)
-        for pts in polygons:
-            draw_polygon(pts, stroke, offset=0)
-
-        img = img.resize((size_px, size_px), Image.Resampling.LANCZOS)
-        self._nav_icon_cache[key] = img
-        return img
+    def on_canvas_leave(self, event):
+        self.image_canvas.configure(cursor="")
 
     def copy_to_clipboard(self, content):
         try:

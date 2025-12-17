@@ -3,6 +3,8 @@ name: Build Windows EXE
 on:
   workflow_dispatch:
   push:
+    branches:
+      - main
     tags:
       - "v*"
 
@@ -49,7 +51,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: sd-prompt-reader-windows
+          name: sd-prompt-reader-windows-${{ github.run_number }}-${{ github.sha }}
           path: sd-prompt-reader-windows.zip
 
       - name: Create GitHub Release
