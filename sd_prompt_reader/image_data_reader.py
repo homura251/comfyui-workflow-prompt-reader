@@ -291,7 +291,7 @@ class ImageDataReader:
                         if data and metadata:
                             piexif.insert(metadata, str(new_path))
             except Exception:
-                print("Save error")
+                print("保存失败")
 
     @staticmethod
     def construct_data(positive, negative, setting):

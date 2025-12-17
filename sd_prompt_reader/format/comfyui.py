@@ -240,7 +240,7 @@ class ComfyUI(BaseFormat):
         try:
             inputs = prompt[end_node]["inputs"]
         except:
-            print("node error")
+            print("节点错误")
             return flow, node
         match prompt[end_node]["class_type"]:
             case node_type if node_type in ComfyUI.SAVE_IMAGE_TYPE:
@@ -251,7 +251,7 @@ class ComfyUI(BaseFormat):
                     flow = merge_dict(flow, last_flow)
                     node += last_node
                 except:
-                    print("comfyUI SaveImage error")
+                    print("ComfyUI SaveImage 错误")
             case node_type if node_type in ComfyUI.KSAMPLER_TYPES:
                 try:
                     seed = None
@@ -313,7 +313,7 @@ class ComfyUI(BaseFormat):
                     flow = merge_dict(flow, last_flow2)
                     node += last_node1 + last_node2
                 except:
-                    print("comfyUI KSampler error")
+                    print("ComfyUI KSampler 错误")
             case node_type if node_type in ComfyUI.CLIP_TEXT_ENCODE_TYPE:
                 try:
                     match node_type:
@@ -368,7 +368,7 @@ class ComfyUI(BaseFormat):
                             elif isinstance(inputs["text"], str):
                                 return {"Refiner": inputs.get("text")}
                 except:
-                    print("comfyUI CLIPText error")
+                    print("ComfyUI CLIPText 错误")
             case "LoraLoader":
                 try:
                     flow = inputs
@@ -378,12 +378,12 @@ class ComfyUI(BaseFormat):
                     flow = merge_dict(flow, last_flow)
                     node += last_node
                 except:
-                    print("comfyUI LoraLoader error")
+                    print("ComfyUI LoraLoader 错误")
             case node_type if node_type in ComfyUI.CHECKPOINT_LOADER_TYPE:
                 try:
                     return inputs, node
                 except:
-                    print("comfyUI CheckpointLoader error")
+                    print("ComfyUI CheckpointLoader 错误")
             case node_type if node_type in ComfyUI.VAE_ENCODE_TYPE:
                 try:
                     last_flow, last_node = self._comfy_traverse(
@@ -392,7 +392,7 @@ class ComfyUI(BaseFormat):
                     flow = merge_dict(flow, last_flow)
                     node += last_node
                 except:
-                    print("comfyUI VAE error")
+                    print("ComfyUI VAE 错误")
             case "ControlNetApplyAdvanced":
                 try:
                     positive = self._comfy_traverse(prompt, inputs["positive"][0])
@@ -412,7 +412,7 @@ class ComfyUI(BaseFormat):
                     flow = merge_dict(flow, last_flow)
                     node += last_node
                 except:
-                    print("comfyUI ControlNetApply error")
+                    print("ComfyUI ControlNetApply 错误")
             case "ImageScale":
                 try:
                     flow = inputs
@@ -422,12 +422,12 @@ class ComfyUI(BaseFormat):
                     flow = merge_dict(flow, last_flow)
                     node += last_node
                 except:
-                    print("comfyUI ImageScale error")
+                    print("ComfyUI ImageScale 错误")
             case "UpscaleModelLoader":
                 try:
                     return {"upscaler": inputs["model_name"]}
                 except:
-                    print("comfyUI UpscaleLoader error")
+                    print("ComfyUI UpscaleLoader 错误")
             case "ImageUpscaleWithModel":
                 try:
                     flow = inputs
@@ -439,7 +439,7 @@ class ComfyUI(BaseFormat):
                     flow = merge_dict(flow, model)
                     node += last_node
                 except:
-                    print("comfyUI UpscaleModel error")
+                    print("ComfyUI UpscaleModel 错误")
             case "ConditioningCombine":
                 try:
                     last_flow1, last_node1 = self._comfy_traverse(
@@ -452,29 +452,29 @@ class ComfyUI(BaseFormat):
                     flow = merge_dict(flow, last_flow2)
                     node += last_node1 + last_node2
                 except:
-                    print("comfyUI ConditioningCombine error")
+                    print("ComfyUI ConditioningCombine 错误")
             # SD Prompt Reader Node
             case "SDPromptReader":
                 try:
                     return json.loads(prompt[end_node]["is_changed"][0])
                 except:
-                    print("comfyUI SDPromptReader error")
+                    print("ComfyUI SDPromptReader 错误")
             case "SDParameterGenerator":
                 try:
                     return inputs
                 except:
-                    print("comfyUI SDParameterGenerator error")
+                    print("ComfyUI SDParameterGenerator 错误")
             # custom nodes
             case "SDXLPromptStyler":
                 try:
                     return inputs.get("text_positive"), inputs.get("text_negative")
                 except:
-                    print("comfyUI SDXLPromptStyler error")
+                    print("ComfyUI SDXLPromptStyler 错误")
             case "CR Seed":
                 try:
                     return inputs.get("seed")
                 except:
-                    print("comfyUI CR Seed error")
+                    print("ComfyUI CR Seed 错误")
 
             # WeiLin Prompt All In One (custom)
             case "WeiLinComfyUIPromptAllInOneGreat":
@@ -483,7 +483,7 @@ class ComfyUI(BaseFormat):
                     # link to it.
                     return {"positive": inputs.get("positive")}
                 except:
-                    print("comfyUI WeiLinComfyUI prompt error")
+                    print("ComfyUI WeiLinComfyUI prompt 错误")
 
             # rgthree / other switch nodes (pass-through)
             case node_type if isinstance(node_type, str) and (
@@ -497,7 +497,7 @@ class ComfyUI(BaseFormat):
                                 return traverse_result
                     return
                 except:
-                    print("comfyUI switch node error")
+                    print("ComfyUI switch 节点错误")
             case _:
                 try:
                     last_flow = {}
@@ -546,5 +546,5 @@ class ComfyUI(BaseFormat):
                     flow = merge_dict(flow, last_flow)
                     node += last_node
                 except:
-                    print("comfyUI bridging node error")
+                    print("ComfyUI bridging 节点错误")
         return flow, node

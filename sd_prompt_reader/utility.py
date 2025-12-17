@@ -35,9 +35,9 @@ def get_images(dir_path: Path):
 def select_image(file_path=None):
     initial_dir = file_path.parent if file_path else "/"
     return filedialog.askopenfilename(
-        title="Select your image file",
+        title="选择图片文件",
         initialdir=initial_dir,
-        filetypes=(("image files", "*.png *.jpg *jpeg *.webp"),),
+        filetypes=(("图片文件", "*.png *.jpg *.jpeg *.webp"),),
     )
 
 
@@ -45,7 +45,7 @@ def copy_to_clipboard(status_bar, content):
     try:
         pyperclip.copy(content)
     except Exception:
-        print("Copy error")
+        print("复制失败")
     else:
         status_bar.clipboard()
 

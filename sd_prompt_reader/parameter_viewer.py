@@ -25,7 +25,7 @@ class ParameterViewer:
         self.setting_model_frame.grid(
             row=0, column=0, sticky="we", padx=10, pady=(1, 2)
         )
-        self.setting_model_label = CTkLabel(self.setting_model_frame, text="Model:")
+        self.setting_model_label = CTkLabel(self.setting_model_frame, text="模型：")
         self.setting_model_label.pack(side="left", padx=(0, 5))
         self.setting_model = CTkLabel(
             self.setting_model_frame,
@@ -45,7 +45,7 @@ class ParameterViewer:
         )
         self.setting_sampler_frame.grid(row=1, column=0, sticky="we", padx=10, pady=2)
         self.setting_sampler_label = CTkLabel(
-            self.setting_sampler_frame, text="Sampler:"
+            self.setting_sampler_frame, text="采样器："
         )
         self.setting_sampler_label.pack(side="left", padx=(0, 5))
         self.setting_sampler = CTkLabel(
@@ -65,7 +65,7 @@ class ParameterViewer:
             self.setting_box_parameter, fg_color="transparent"
         )
         self.setting_seed_frame.grid(row=2, column=0, sticky="we", padx=10, pady=(2, 1))
-        self.setting_seed_label = CTkLabel(self.setting_seed_frame, text="Seed:")
+        self.setting_seed_label = CTkLabel(self.setting_seed_frame, text="种子：")
         self.setting_seed_label.pack(side="left", padx=(0, 5))
         self.setting_seed = CTkLabel(
             self.setting_seed_frame,
@@ -84,7 +84,7 @@ class ParameterViewer:
             self.setting_box_parameter, fg_color="transparent"
         )
         self.setting_cfg_frame.grid(row=0, column=1, sticky="we", padx=10)
-        self.setting_cfg_label = CTkLabel(self.setting_cfg_frame, text="CFG scale:")
+        self.setting_cfg_label = CTkLabel(self.setting_cfg_frame, text="CFG：")
         self.setting_cfg_label.pack(side="left", padx=(0, 5))
         self.setting_cfg = CTkLabel(
             self.setting_cfg_frame,
@@ -103,7 +103,7 @@ class ParameterViewer:
             self.setting_box_parameter, fg_color="transparent"
         )
         self.setting_steps_frame.grid(row=1, column=1, sticky="we", padx=10)
-        self.setting_steps_label = CTkLabel(self.setting_steps_frame, text="Steps:")
+        self.setting_steps_label = CTkLabel(self.setting_steps_frame, text="步数：")
         self.setting_steps_label.pack(side="left", padx=(0, 5))
         self.setting_steps = CTkLabel(
             self.setting_steps_frame,
@@ -122,7 +122,7 @@ class ParameterViewer:
             self.setting_box_parameter, fg_color="transparent"
         )
         self.setting_size_frame.grid(row=2, column=1, sticky="we", padx=10)
-        self.setting_size_label = CTkLabel(self.setting_size_frame, text="Size:")
+        self.setting_size_label = CTkLabel(self.setting_size_frame, text="尺寸：")
         self.setting_size_label.pack(side="left", padx=(0, 5))
         self.setting_size = CTkLabel(
             self.setting_size_frame,
@@ -161,6 +161,6 @@ class ParameterViewer:
         try:
             pyperclip.copy(content)
         except:
-            print("Copy error")
+            print("复制失败")
         else:
             self.status_bar.clipboard()

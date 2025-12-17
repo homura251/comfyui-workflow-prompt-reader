@@ -46,7 +46,7 @@ class App(Tk):
         Logger.configure_global_logger("INFO")
         # window = TkinterDnD.Tk()
         # window = Tk()
-        self.title("SD Prompt Reader")
+        self.title("SD 提示词读取器")
         self.geometry("1280x600")
         # set_appearance_mode("Light")
         # deactivate_automatic_dpi_awareness()
@@ -195,10 +195,11 @@ class App(Tk):
         )
         self.button_image_sort = STkButton(
             self.status_bar.status_frame,
-            width=BUTTON_WIDTH_S,
-            height=BUTTON_HEIGHT_S,
+            width=110,
+            height=STATUS_BAR_HEIGHT,
             image=self.sort_image,
-            text="",
+            text=MESSAGE["img_sort_btn"][0],
+            font=self.info_font,
             command=self.toggle_image_sort_mode,
         )
         self.button_image_sort.switch_off()
@@ -210,12 +211,12 @@ class App(Tk):
         )
 
         # textbox
-        self.positive_box = PromptViewer(self, self.status_bar, "Prompt")
+        self.positive_box = PromptViewer(self, self.status_bar, "正向提示词")
         self.positive_box.viewer_frame.grid(
             row=0, column=1, columnspan=6, sticky="news", padx=(0, 20), pady=(20, 20)
         )
 
-        self.negative_box = PromptViewer(self, self.status_bar, "Negative Prompt")
+        self.negative_box = PromptViewer(self, self.status_bar, "反向提示词")
         self.negative_box.viewer_frame.grid(
             row=1, column=1, columnspan=6, sticky="news", padx=(0, 20), pady=(0, 20)
         )
@@ -224,7 +225,7 @@ class App(Tk):
         self.setting_box.grid(
             row=2, column=1, columnspan=6, sticky="news", padx=(0, 20), pady=(1, 21)
         )
-        self.setting_box.text = "Setting"
+        self.setting_box.text = "参数"
 
         # setting box simple mode
         self.setting_box_simple = CTkFrame(
@@ -327,7 +328,7 @@ class App(Tk):
             self.button_edit_frame,
             width=BUTTON_WIDTH_L,
             height=LABEL_HEIGHT,
-            text="Edit",
+            text="编辑",
             font=self.info_font,
         )
         self.button_edit_label.pack(side="bottom")
@@ -355,7 +356,7 @@ class App(Tk):
             self.button_save_frame,
             font=self.info_font,
             dynamic_resizing=False,
-            values=["select directory", "overwrite the original image"],
+            values=["选择位置", "覆盖原图"],
             command=self.save_data,
         )
         self.button_save_option_arrow = STkButton(
@@ -371,7 +372,7 @@ class App(Tk):
             self.button_save_frame,
             width=BUTTON_WIDTH_L,
             height=LABEL_HEIGHT,
-            text="Save",
+            text="保存",
             font=self.info_font,
         )
         self.button_save_label.grid(row=1, column=0, rowspan=2)
@@ -400,7 +401,7 @@ class App(Tk):
             self.button_remove_frame,
             font=self.info_font,
             dynamic_resizing=False,
-            values=["select directory", "overwrite the original image"],
+            values=["选择位置", "覆盖原图"],
             command=self.remove_data,
         )
         self.button_remove_option_arrow = STkButton(
@@ -418,7 +419,7 @@ class App(Tk):
             self.button_remove_frame,
             width=BUTTON_WIDTH_L,
             height=LABEL_HEIGHT,
-            text="Clear",
+            text="清除",
             font=self.info_font,
         )
         self.button_remove_label.grid(row=1, column=0, rowspan=2)
@@ -447,7 +448,7 @@ class App(Tk):
             self,
             font=self.info_font,
             dynamic_resizing=False,
-            values=["select directory"],
+            values=["选择位置"],
             command=self.export_txt,
         )
         self.button_export_option_arrow = STkButton(
@@ -465,7 +466,7 @@ class App(Tk):
             self.button_export_frame,
             width=BUTTON_WIDTH_L,
             height=LABEL_HEIGHT,
-            text="Export",
+            text="导出",
             font=self.info_font,
         )
         self.button_export_label.grid(row=1, column=0, rowspan=2)
@@ -492,7 +493,7 @@ class App(Tk):
             self,
             font=self.info_font,
             dynamic_resizing=False,
-            values=["single line prompt"],
+            values=["单行提示词"],
             command=self.copy_raw,
         )
         self.button_raw_option_arrow = STkButton(
@@ -508,7 +509,7 @@ class App(Tk):
             self.button_copy_raw_frame,
             width=BUTTON_WIDTH_L,
             height=LABEL_HEIGHT,
-            text="Copy",
+            text="复制",
             font=self.info_font,
         )
         self.button_raw_label.grid(row=1, column=0, rowspan=2)
@@ -923,9 +924,11 @@ class App(Tk):
         self._image_sequence_sort_by_time = not self._image_sequence_sort_by_time
         if self._image_sequence_sort_by_time:
             self.button_image_sort.switch_on()
+            self.button_image_sort.configure(text=MESSAGE["img_sort_btn"][1])
             self.status_bar.info(MESSAGE["img_sort"][1])
         else:
             self.button_image_sort.switch_off()
+            self.button_image_sort.configure(text=MESSAGE["img_sort_btn"][0])
             self.status_bar.info(MESSAGE["img_sort"][0])
 
         if self.file_path is not None:
@@ -1407,7 +1410,7 @@ class App(Tk):
         try:
             pyperclip.copy(content)
         except:
-            print("Copy error")
+            print("复制失败")
         else:
             self.status_bar.clipboard()
 
@@ -1427,12 +1430,12 @@ class App(Tk):
                 self.status_bar.success(MESSAGE["alongside"][0])
         else:
             match export_mode:
-                case "select directory":
+                case "选择位置":
                     path = filedialog.asksaveasfilename(
-                        title="Select directory",
+                        title="选择保存位置",
                         initialdir=self.file_path.parent,
                         initialfile=self.file_path.stem,
-                        filetypes=(("text file", "*.txt"),),
+                        filetypes=(("文本文件", "*.txt"),),
                     )
                     if path:
                         with open(
@@ -1451,25 +1454,25 @@ class App(Tk):
                     self.file_path, new_path, self.image_data.format
                 )
             except:
-                print("Remove error")
+                print("清除失败")
             else:
                 self.status_bar.success(MESSAGE["suffix"][0])
         else:
             match remove_mode:
                 # case "add suffix":
                 #
-                case "overwrite the original image":
+                case "覆盖原图":
                     try:
                         self.image_data.save_image(
                             self.file_path, self.file_path, self.image_data.format
                         )
                     except:
-                        print("Remove error")
+                        print("清除失败")
                     else:
                         self.status_bar.success(MESSAGE["overwrite"][0])
-                case "select directory":
+                case "选择位置":
                     path = filedialog.asksaveasfilename(
-                        title="Select directory",
+                        title="选择保存位置",
                         initialdir=self.file_path.parent,
                         initialfile=new_path.name,
                     )
@@ -1479,7 +1482,7 @@ class App(Tk):
                                 self.file_path, path, self.image_data.format
                             )
                         except:
-                            print("Remove error")
+                            print("清除失败")
                         else:
                             self.status_bar.success(MESSAGE["remove_select"][0])
 
@@ -1499,12 +1502,12 @@ class App(Tk):
                         self.file_path, new_path, self.image_data.format, data
                     )
                 except:
-                    print("Save error")
+                    print("保存失败")
                 else:
                     self.status_bar.success(MESSAGE["suffix"][0])
             else:
                 match save_mode:
-                    case "overwrite the original image":
+                    case "覆盖原图":
                         try:
                             self.image_data.save_image(
                                 self.file_path,
@@ -1513,12 +1516,12 @@ class App(Tk):
                                 data,
                             )
                         except:
-                            print("Save error")
+                            print("保存失败")
                         else:
                             self.status_bar.success(MESSAGE["overwrite"][0])
-                    case "select directory":
+                    case "选择位置":
                         path = filedialog.asksaveasfilename(
-                            title="Select directory",
+                            title="选择保存位置",
                             initialdir=self.file_path.parent,
                             initialfile=new_path.name,
                         )
@@ -1528,13 +1531,13 @@ class App(Tk):
                                     self.file_path, path, self.image_data.format, data
                                 )
                             except:
-                                print("Save error")
+                                print("保存失败")
                             else:
                                 self.status_bar.success(MESSAGE["remove_select"][0])
 
     def copy_raw(self, copy_mode: str = None):
         match copy_mode:
-            case "single line prompt":
+            case "单行提示词":
                 self.copy_to_clipboard(self.image_data.prompt_to_line())
 
     def edit_mode_switch(self):
@@ -1630,9 +1633,9 @@ class App(Tk):
     def select_image(self):
         initialdir = self.file_path.parent if self.file_path else "/"
         return filedialog.askopenfilename(
-            title="Select your image file",
+            title="选择图片文件",
             initialdir=initialdir,
-            filetypes=(("image files", "*.png *.jpg *.jpeg *.webp"),),
+            filetypes=(("图片文件", "*.png *.jpg *.jpeg *.webp"),),
         )
 
     @staticmethod

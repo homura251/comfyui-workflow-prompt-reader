@@ -51,18 +51,18 @@ class StatusBar:
 
     def export(self, export_mode: str):
         match export_mode:
-            case "alongside the image file":
+            case "与图片同目录":
                 self.info(MESSAGE["alongside"][0])
-            case "select directory":
+            case "选择位置":
                 self.info(MESSAGE["txt_select"][0])
 
     def remove(self, remove_mode: str):
         match remove_mode:
-            case "add suffix":
+            case "添加后缀":
                 self.info(MESSAGE["suffix"][0])
-            case "overwrite the original image":
+            case "覆盖原图":
                 self.info(MESSAGE["overwrite"][0])
-            case "select directory":
+            case "选择位置":
                 self.info(MESSAGE["remove_select"][0])
 
     def link(self, url, is_update=False):

@@ -24,7 +24,7 @@ class UpdateChecker:
         try:
             response = requests.get(URL["release"], timeout=3).json()
         except Exception:
-            print("Github api connection error")
+            print("GitHub API 连接失败")
         else:
             latest = response["name"]
             if version.parse(latest) > version.parse(VERSION):
