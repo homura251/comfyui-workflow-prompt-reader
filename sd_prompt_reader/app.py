@@ -12,7 +12,7 @@ from tkinter import PhotoImage, Menu
 
 import pyperclip as pyperclip
 from CTkToolTip import *
-from PIL import Image
+from PIL import Image, ImageDraw
 from customtkinter import (
     ScalingTracker,
     CTkButton,
@@ -95,11 +95,6 @@ class App(Tk):
             row=0, column=0, rowspan=4, sticky="news", padx=20, pady=20
         )
 
-        self.image_frame.rowconfigure(0, weight=1)
-        self.image_frame.columnconfigure(0, weight=0)
-        self.image_frame.columnconfigure(1, weight=1)
-        self.image_frame.columnconfigure(2, weight=0)
-
         self.image_label = CTkLabel(
             self.image_frame,
             width=560,
@@ -108,7 +103,7 @@ class App(Tk):
             compound="top",
             text_color=ACCESSIBLE_GRAY,
         )
-        self.image_label.grid(row=0, column=1, sticky="news")
+        self.image_label.pack(fill="both", expand=True)
         self.image_label.bind(
             "<Button-1>",
             lambda e: self.display_info(self.select_image(), is_selected=True),
@@ -130,48 +125,29 @@ class App(Tk):
         self._image_load_requested_path = None
         self._image_load_requested_max_dim = None
         self._image_load_request_id = 0
-        self._nav_button_size = BUTTON_HEIGHT_S
-        self._nav_button_corner = int(self._nav_button_size / 2)
-        self._nav_button_font = CTkFont(size=16)
-        self._nav_button_style = {
-            "width": self._nav_button_size,
-            "height": self._nav_button_size,
-            "corner_radius": self._nav_button_corner,
-            "font": self._nav_button_font,
-            "border_width": 1,
-            "border_color": ACCESSIBLE_GRAY,
-            "hover_color": BUTTON_HOVER,
-            "fg_color": ThemeManager.theme["CTkFrame"]["fg_color"],
-            "text_color": ACCESSIBLE_GRAY,
-        }
 
-        self.nav_left_frame = CTkFrame(self.image_frame, fg_color="transparent")
-        self.nav_left_frame.grid(row=0, column=0, sticky="nsw")
-        self.nav_left_frame.rowconfigure(0, weight=1)
-        self.nav_left_frame.rowconfigure(1, weight=0)
-        self.nav_left_frame.rowconfigure(2, weight=1)
+        # circular navigation icons (transparent background)
+        self._nav_icon_size = 34
+        self._nav_icon_prev_enabled = self._build_nav_icon("prev", enabled=True)
+        self._nav_icon_prev_disabled = self._build_nav_icon("prev", enabled=False)
+        self._nav_icon_next_enabled = self._build_nav_icon("next", enabled=True)
+        self._nav_icon_next_disabled = self._build_nav_icon("next", enabled=False)
 
-        self.button_prev_image = CTkButton(
-            self.nav_left_frame,
-            text="<",
-            command=lambda: self.navigate_image(-1),
-            **self._nav_button_style,
+        self.button_prev_image = CTkLabel(
+            self.image_frame,
+            text="",
+            image=self._nav_icon_prev_disabled,
+            fg_color="transparent",
         )
-        self.button_prev_image.grid(row=1, column=0, padx=(6, 8))
+        self.button_prev_image.place(relx=0.03, rely=0.5, anchor="w")
 
-        self.nav_right_frame = CTkFrame(self.image_frame, fg_color="transparent")
-        self.nav_right_frame.grid(row=0, column=2, sticky="nse")
-        self.nav_right_frame.rowconfigure(0, weight=1)
-        self.nav_right_frame.rowconfigure(1, weight=0)
-        self.nav_right_frame.rowconfigure(2, weight=1)
-
-        self.button_next_image = CTkButton(
-            self.nav_right_frame,
-            text=">",
-            command=lambda: self.navigate_image(1),
-            **self._nav_button_style,
+        self.button_next_image = CTkLabel(
+            self.image_frame,
+            text="",
+            image=self._nav_icon_next_disabled,
+            fg_color="transparent",
         )
-        self.button_next_image.grid(row=1, column=0, padx=(8, 6))
+        self.button_next_image.place(relx=0.97, rely=0.5, anchor="e")
 
         self.image = None
         self.image_tk = None
@@ -756,6 +732,76 @@ class App(Tk):
         self._image_sequence_scanning = False
         self.update_image_navigation_state()
 
+    @staticmethod
+    def _hex_to_rgb(hex_color: str):
+        if not isinstance(hex_color, str):
+            return None
+        if hex_color.startswith("#") and len(hex_color) == 7:
+            try:
+                return tuple(int(hex_color[i : i + 2], 16) for i in (1, 3, 5))
+            except Exception:
+                return None
+        return None
+
+    def _build_nav_icon(self, direction: str, enabled: bool):
+        def draw_icon(mode: str):
+            size = self._nav_icon_size
+            img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
+            draw = ImageDraw.Draw(img)
+
+            if mode == "dark":
+                stroke = self._hex_to_rgb(ACCESSIBLE_GRAY[1]) or (174, 174, 178)
+            else:
+                stroke = self._hex_to_rgb(ACCESSIBLE_GRAY[0]) or (108, 108, 112)
+
+            stroke_alpha = 230 if enabled else 110
+            arrow_alpha = 245 if enabled else 110
+
+            pad = 2
+            draw.ellipse(
+                (pad, pad, size - pad - 1, size - pad - 1),
+                fill=(0, 0, 0, 0),
+                outline=(*stroke, stroke_alpha),
+                width=2,
+            )
+
+            cx = size * 0.5
+            cy = size * 0.5
+            w = size * 0.22
+            h = size * 0.26
+
+            if direction == "prev":
+                points = [(cx + w * 0.6, cy - h), (cx + w * 0.6, cy + h), (cx - w, cy)]
+            else:
+                points = [(cx - w * 0.6, cy - h), (cx - w * 0.6, cy + h), (cx + w, cy)]
+
+            draw.polygon(points, fill=(*stroke, arrow_alpha))
+            return img
+
+        return CTkImage(
+            light_image=draw_icon("light"),
+            dark_image=draw_icon("dark"),
+            size=(self._nav_icon_size, self._nav_icon_size),
+        )
+
+    def _set_nav_widget_enabled(self, widget: CTkLabel, enabled: bool, direction: str):
+        if direction == "prev":
+            icon = (
+                self._nav_icon_prev_enabled if enabled else self._nav_icon_prev_disabled
+            )
+        else:
+            icon = (
+                self._nav_icon_next_enabled if enabled else self._nav_icon_next_disabled
+            )
+
+        widget.configure(image=icon, cursor="hand2" if enabled else "")
+        widget.unbind("<Button-1>")
+        if enabled:
+            widget.bind(
+                "<Button-1>",
+                lambda e: self.navigate_image(-1 if direction == "prev" else 1),
+            )
+
     def _invalidate_image_cache(self, path: Path):
         key = self._normalize_path_key(path)
         self._image_cache.pop(key, None)
@@ -867,10 +913,32 @@ class App(Tk):
             self.unsupported_format([None, "Failed to load image"], reset_image=True)
             return
 
+        self.image = pil_image
+        self.image_tk = CTkImage(self.image)
+        self.resize_image()
+
         self.image_data = image_data
-        if not self.image_data.tool or self.image_data.status.name == "FORMAT_ERROR":
+        self.update_image_navigation_state()
+        self._cache_put(image_path, pil_image, image_data)
+
+        # Yield to UI before updating text widgets (can be heavy for large metadata).
+        self.after(1, lambda: self._apply_loaded_metadata(request_id, image_path))
+
+        # Best-effort prefetch neighbors to make next/prev smoother.
+        self._prefetch_neighbors(image_path)
+
+    def _apply_loaded_metadata(self, request_id: int, image_path: Path):
+        with self._image_load_lock:
+            if request_id != self._image_load_request_id:
+                return
+
+        if self.file_path is None or self._normalize_path_key(self.file_path) != self._normalize_path_key(image_path):
+            return
+
+        if not self.image_data or not self.image_data.tool or self.image_data.status.name == "FORMAT_ERROR":
             self.unsupported_format(MESSAGE["format_error"])
             return
+
         if self.image_data.status.name == "COMFYUI_ERROR":
             self.unsupported_format(MESSAGE["comfyui_error"], url=URL["comfyui"], raw=True)
             return
@@ -905,15 +973,50 @@ class App(Tk):
             self.button_edit.disable()
 
         self.status_bar.success(self.image_data.tool)
-        self.image = pil_image
-        self.image_tk = CTkImage(self.image)
-        self.resize_image()
 
         if self.button_edit.mode == EditMode.ON:
             self.edit_mode_update()
 
-        self.update_image_navigation_state()
-        self._cache_put(image_path, pil_image, image_data)
+    def _prefetch_neighbors(self, image_path: Path):
+        if self._image_sequence_index is None or not self._image_sequence:
+            return
+
+        indices = [
+            self._image_sequence_index - 1,
+            self._image_sequence_index + 1,
+        ]
+        paths = [
+            self._image_sequence[i]
+            for i in indices
+            if 0 <= i < len(self._image_sequence)
+        ]
+        if not paths:
+            return
+
+        max_dim = self._image_load_requested_max_dim
+        if max_dim is None:
+            max_dim = 1200
+
+        def worker():
+            for p in paths:
+                if self._cache_get(p) is not None:
+                    continue
+                try:
+                    data = ImageDataReader(str(p))
+                    with Image.open(p) as img:
+                        try:
+                            img.draft("RGB", (max_dim, max_dim))
+                        except Exception:
+                            pass
+                        img.load()
+                        img.thumbnail((max_dim, max_dim), Image.Resampling.LANCZOS)
+                        pil = img.copy()
+                except Exception:
+                    continue
+
+                self.after(0, lambda _p=p, _pil=pil, _data=data: self._cache_put(_p, _pil, _data))
+
+        threading.Thread(target=worker, daemon=True).start()
 
     def update_image_navigation_state(self):
         has_prev = (
@@ -923,8 +1026,8 @@ class App(Tk):
             self._image_sequence_index is not None
             and self._image_sequence_index < len(self._image_sequence) - 1
         )
-        self.button_prev_image.configure(state="normal" if has_prev else "disabled")
-        self.button_next_image.configure(state="normal" if has_next else "disabled")
+        self._set_nav_widget_enabled(self.button_prev_image, has_prev, "prev")
+        self._set_nav_widget_enabled(self.button_next_image, has_next, "next")
 
     def _navigation_key_should_trigger(self):
         focused = self.focus_get()
