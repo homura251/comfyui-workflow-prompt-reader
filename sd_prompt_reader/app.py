@@ -163,6 +163,9 @@ class App(Tk):
         self._image_load_requested_path = None
         self._image_load_requested_max_dim = None
         self._image_load_request_id = 0
+        self._prefetch_running = False
+        self._prefetch_pending = set()
+        self._prefetch_lock = threading.Lock()
 
         # navigation icons are rendered as canvas overlay items (no widget background)
         self._nav_prev_svg = Path(RESOURCE_DIR, "nav_prev.svg")
@@ -555,6 +558,9 @@ class App(Tk):
         self.display_info(args[0], is_selected=True)
 
     def display_info(self, event, is_selected=False):
+        return self._display_info(event, is_selected=is_selected, is_navigation=False)
+
+    def _display_info(self, event, is_selected=False, is_navigation=False):
         self.status_bar.unbind()
         # stop update thread when reading first image
         self.update_checker.close_thread()
@@ -570,7 +576,7 @@ class App(Tk):
         if new_path.suffix.lower() in SUPPORTED_FORMATS:
             self.file_path = new_path
             self.refresh_image_sequence(self.file_path)
-            self._prepare_loading_state()
+            self._prepare_loading_state(is_navigation=is_navigation)
             self._request_image_load(self.file_path)
             return
 
@@ -716,7 +722,7 @@ class App(Tk):
         self._prefer_fast_render = False
         self.resize_image()
 
-    def _prepare_loading_state(self):
+    def _prepare_loading_state(self, is_navigation: bool = False):
         self.readable = False
         if self._metadata_after_id is not None:
             try:
@@ -724,10 +730,18 @@ class App(Tk):
             except Exception:
                 pass
             self._metadata_after_id = None
+        if self._hq_render_after_id is not None:
+            try:
+                self.after_cancel(self._hq_render_after_id)
+            except Exception:
+                pass
+            self._hq_render_after_id = None
         for button in self.function_buttons:
-            button.disable()
-        self.positive_box.all_off()
-        self.negative_box.all_off()
+            if not is_navigation:
+                button.disable()
+        if not is_navigation:
+            self.positive_box.all_off()
+            self.negative_box.all_off()
         self.button_save.disable()
         self.button_edit.disable()
         self.status_bar.info("Loading...")
@@ -965,7 +979,9 @@ class App(Tk):
         key = self._normalize_path_key(path)
         self._image_cache.pop(key, None)
 
-    def _cache_put(self, path: Path, pil_image: Image.Image, image_data: ImageDataReader):
+    def _cache_put(
+        self, path: Path, pil_image: Image.Image, image_data: ImageDataReader | None
+    ):
         key = self._normalize_path_key(path)
         self._image_cache[key] = (pil_image, image_data)
         self._image_cache.move_to_end(key)
@@ -1005,11 +1021,9 @@ class App(Tk):
                     continue
 
                 pil_image = None
-                image_data = None
                 load_error = None
 
                 try:
-                    image_data = ImageDataReader(str(requested_path))
                     with Image.open(requested_path) as img:
                         if requested_max_dim is not None:
                             try:
@@ -1026,13 +1040,17 @@ class App(Tk):
                 except Exception as e:
                     load_error = e
 
+                with self._image_load_lock:
+                    if request_id != self._image_load_request_id:
+                        continue
+
                 self.after(
                     0,
                     lambda: self._apply_loaded_image(
                         request_id,
                         requested_path,
                         pil_image,
-                        image_data,
+                        None,
                         load_error=load_error,
                     ),
                 )
@@ -1058,7 +1076,7 @@ class App(Tk):
         request_id: int,
         image_path: Path,
         pil_image: Image.Image,
-        image_data: ImageDataReader,
+        image_data: ImageDataReader | None,
         load_error=None,
     ):
         with self._image_load_lock:
@@ -1068,7 +1086,7 @@ class App(Tk):
         if self.file_path is None or self._normalize_path_key(self.file_path) != self._normalize_path_key(image_path):
             return
 
-        if load_error is not None or pil_image is None or image_data is None:
+        if load_error is not None or pil_image is None:
             self.unsupported_format([None, "Failed to load image"], reset_image=True)
             return
 
@@ -1087,12 +1105,14 @@ class App(Tk):
         self._cache_put(image_path, pil_image, image_data)
 
         self.update_image_navigation_state()
-        self._schedule_metadata_apply(request_id, image_path)
+        self._schedule_metadata_update(request_id, image_path, image_data)
 
         # Best-effort prefetch neighbors to make next/prev smoother.
         self._prefetch_neighbors(image_path)
 
-    def _schedule_metadata_apply(self, request_id: int, image_path: Path):
+    def _schedule_metadata_update(
+        self, request_id: int, image_path: Path, image_data: ImageDataReader | None
+    ):
         if self._metadata_after_id is not None:
             try:
                 self.after_cancel(self._metadata_after_id)
@@ -1100,12 +1120,40 @@ class App(Tk):
                 pass
             self._metadata_after_id = None
 
-        # Avoid stutter when rapidly paging; apply metadata only after a short pause.
-        self._metadata_after_id = self.after(
-            450, lambda: self._apply_loaded_metadata(request_id, image_path)
-        )
+        def run():
+            if image_data is None:
+                self._start_metadata_loader(request_id, image_path)
+            else:
+                self._apply_loaded_metadata(request_id, image_path, image_data=image_data)
 
-    def _apply_loaded_metadata(self, request_id: int, image_path: Path):
+        # Avoid stutter when rapidly paging; apply metadata only after a short pause.
+        self._metadata_after_id = self.after(450, run)
+
+    def _start_metadata_loader(self, request_id: int, image_path: Path):
+        def worker():
+            parsed = None
+            err = None
+            try:
+                parsed = ImageDataReader(str(image_path))
+            except Exception as e:
+                err = e
+
+            self.after(
+                0,
+                lambda: self._apply_loaded_metadata(
+                    request_id, image_path, image_data=parsed, load_error=err
+                ),
+            )
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _apply_loaded_metadata(
+        self,
+        request_id: int,
+        image_path: Path,
+        image_data: ImageDataReader | None = None,
+        load_error=None,
+    ):
         self._metadata_after_id = None
         with self._image_load_lock:
             if request_id != self._image_load_request_id:
@@ -1114,7 +1162,14 @@ class App(Tk):
         if self.file_path is None or self._normalize_path_key(self.file_path) != self._normalize_path_key(image_path):
             return
 
-        if not self.image_data or not self.image_data.tool or self.image_data.status.name == "FORMAT_ERROR":
+        if load_error is not None or image_data is None:
+            self.unsupported_format(MESSAGE["format_error"])
+            return
+
+        self.image_data = image_data
+        self._cache_put(image_path, self.image, image_data)
+
+        if not self.image_data.tool or self.image_data.status.name == "FORMAT_ERROR":
             self.unsupported_format(MESSAGE["format_error"])
             return
 
@@ -1176,24 +1231,52 @@ class App(Tk):
         if max_dim is None:
             max_dim = 1200
 
-        def worker():
+        with self._prefetch_lock:
             for p in paths:
-                if self._cache_get(p) is not None:
-                    continue
-                try:
-                    data = ImageDataReader(str(p))
-                    with Image.open(p) as img:
-                        try:
-                            img.draft("RGB", (max_dim, max_dim))
-                        except Exception:
-                            pass
-                        img.load()
-                        img.thumbnail((max_dim, max_dim), Image.Resampling.LANCZOS)
-                        pil = img.copy()
-                except Exception:
-                    continue
+                self._prefetch_pending.add(self._normalize_path_key(p))
 
-                self.after(0, lambda _p=p, _pil=pil, _data=data: self._cache_put(_p, _pil, _data))
+        if self._prefetch_running:
+            return
+
+        self._prefetch_running = True
+
+        def worker():
+            try:
+                while True:
+                    next_key = None
+                    next_path = None
+                    with self._prefetch_lock:
+                        for key in list(self._prefetch_pending):
+                            next_key = key
+                            next_path = Path(key)
+                            break
+
+                    if next_key is None or next_path is None:
+                        return
+
+                    with self._prefetch_lock:
+                        self._prefetch_pending.discard(next_key)
+                    if self._cache_get(next_path) is not None:
+                        continue
+
+                    try:
+                        with Image.open(next_path) as img:
+                            try:
+                                img.draft("RGB", (max_dim, max_dim))
+                            except Exception:
+                                pass
+                            img.load()
+                            img.thumbnail((max_dim, max_dim), Image.Resampling.BILINEAR)
+                            pil = img.copy()
+                    except Exception:
+                        continue
+
+                    self.after(
+                        0,
+                        lambda _p=next_path, _pil=pil: self._cache_put(_p, _pil, None),
+                    )
+            finally:
+                self._prefetch_running = False
 
         threading.Thread(target=worker, daemon=True).start()
 
@@ -1233,7 +1316,9 @@ class App(Tk):
         new_index = self._image_sequence_index + delta
         if new_index < 0 or new_index >= len(self._image_sequence):
             return
-        self.display_info(str(self._image_sequence[new_index]), is_selected=True)
+        self._display_info(
+            str(self._image_sequence[new_index]), is_selected=True, is_navigation=True
+        )
 
     def on_canvas_click(self, event):
         current = self.image_canvas.find_withtag("current")
