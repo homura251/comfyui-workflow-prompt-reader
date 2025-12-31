@@ -154,7 +154,7 @@ class App(Tk):
         self._image_sequence_dir_key = None
         self._image_sequence_scan_id = 0
         self._image_sequence_scanning = False
-        self._image_sequence_sort_by_time = False
+        self._image_sequence_sort_by_time = True
 
         self._image_cache = OrderedDict()
         self._image_cache_max = 6
@@ -198,11 +198,11 @@ class App(Tk):
             width=110,
             height=STATUS_BAR_HEIGHT,
             image=self.sort_image,
-            text=MESSAGE["img_sort_btn"][0],
+            text=MESSAGE["img_sort_btn"][1],
             font=self.info_font,
             command=self.toggle_image_sort_mode,
         )
-        self.button_image_sort.switch_off()
+        self.button_image_sort.switch_on()
         self.button_image_sort.pack(side="right", padx=(0, 4))
         self.button_image_sort_tooltip = CTkToolTip(
             self.button_image_sort,
