@@ -10,6 +10,7 @@ import threading
 from collections import OrderedDict
 import xml.etree.ElementTree as ET
 from tkinter import PhotoImage, Menu, Canvas
+from urllib.parse import urlparse, unquote
 
 import pyperclip as pyperclip
 from CTkToolTip import *
@@ -587,7 +588,28 @@ class App(Tk):
                 return
             new_path = Path(event)
         else:
-            new_path = Path(event.data.replace("}", "").replace("{", ""))
+            drop_data = getattr(event, "data", "")
+            drop_items = []
+            if isinstance(drop_data, str) and drop_data:
+                try:
+                    drop_items = list(self.tk.splitlist(drop_data))
+                except Exception:
+                    drop_items = [drop_data.replace("}", "").replace("{", "")]
+
+            if not drop_items:
+                return
+
+            first_item = drop_items[0]
+            if isinstance(first_item, str) and first_item.startswith("file:"):
+                try:
+                    parsed = urlparse(first_item)
+                    first_item = unquote(parsed.path)
+                    if platform.system() == "Windows" and first_item.startswith("/"):
+                        first_item = first_item.lstrip("/")
+                except Exception:
+                    pass
+
+            new_path = Path(first_item)
 
         # detect suffix and read
         if new_path.suffix.lower() in SUPPORTED_FORMATS:
