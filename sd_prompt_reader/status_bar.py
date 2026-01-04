@@ -60,8 +60,6 @@ class StatusBar:
         match remove_mode:
             case "添加后缀":
                 self.info(MESSAGE["suffix"][0])
-            case "覆盖原图":
-                self.info(MESSAGE["overwrite"][0])
             case "选择位置":
                 self.info(MESSAGE["remove_select"][0])
 

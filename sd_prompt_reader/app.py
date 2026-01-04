@@ -357,7 +357,7 @@ class App(Tk):
             self.button_save_frame,
             font=self.info_font,
             dynamic_resizing=False,
-            values=["选择位置", "覆盖原图"],
+            values=["选择位置"],
             command=self.save_data,
         )
         self.button_save_option_arrow = STkButton(
@@ -402,7 +402,7 @@ class App(Tk):
             self.button_remove_frame,
             font=self.info_font,
             dynamic_resizing=False,
-            values=["选择位置", "覆盖原图"],
+            values=["选择位置"],
             command=self.remove_data,
         )
         self.button_remove_option_arrow = STkButton(
@@ -1467,7 +1467,6 @@ class App(Tk):
                             self.status_bar.success(MESSAGE["txt_select"][0])
 
     def remove_data(self, remove_mode: str = None):
-        image_without_exif = self.image_data.remove_data(self.file_path)
         new_stem = self.file_path.stem + "_data_removed"
         new_path = self.file_path.with_stem(new_stem)
         if not remove_mode:
@@ -1475,6 +1474,8 @@ class App(Tk):
                 self.image_data.save_image(
                     self.file_path, new_path, self.image_data.format
                 )
+            except ValueError:
+                self.status_bar.warning(MESSAGE["no_overwrite"][0])
             except:
                 print("清除失败")
             else:
@@ -1483,15 +1484,6 @@ class App(Tk):
             match remove_mode:
                 # case "add suffix":
                 #
-                case "覆盖原图":
-                    try:
-                        self.image_data.save_image(
-                            self.file_path, self.file_path, self.image_data.format
-                        )
-                    except:
-                        print("清除失败")
-                    else:
-                        self.status_bar.success(MESSAGE["overwrite"][0])
                 case "选择位置":
                     path = filedialog.asksaveasfilename(
                         title="选择保存位置",
@@ -1503,6 +1495,8 @@ class App(Tk):
                             self.image_data.save_image(
                                 self.file_path, path, self.image_data.format
                             )
+                        except ValueError:
+                            self.status_bar.warning(MESSAGE["no_overwrite"][0])
                         except:
                             print("清除失败")
                         else:
@@ -1523,24 +1517,14 @@ class App(Tk):
                     self.image_data.save_image(
                         self.file_path, new_path, self.image_data.format, data
                     )
+                except ValueError:
+                    self.status_bar.warning(MESSAGE["no_overwrite"][0])
                 except:
                     print("保存失败")
                 else:
                     self.status_bar.success(MESSAGE["suffix"][0])
             else:
                 match save_mode:
-                    case "覆盖原图":
-                        try:
-                            self.image_data.save_image(
-                                self.file_path,
-                                self.file_path,
-                                self.image_data.format,
-                                data,
-                            )
-                        except:
-                            print("保存失败")
-                        else:
-                            self.status_bar.success(MESSAGE["overwrite"][0])
                     case "选择位置":
                         path = filedialog.asksaveasfilename(
                             title="选择保存位置",
@@ -1552,6 +1536,8 @@ class App(Tk):
                                 self.image_data.save_image(
                                     self.file_path, path, self.image_data.format, data
                                 )
+                            except ValueError:
+                                self.status_bar.warning(MESSAGE["no_overwrite"][0])
                             except:
                                 print("保存失败")
                             else:

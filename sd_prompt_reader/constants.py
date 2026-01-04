@@ -72,6 +72,7 @@ MESSAGE = {
     "remove": ["已生成新图片文件"],
     "suffix": ["已生成带后缀的新图片文件"],
     "overwrite": ["已覆盖原始图片文件"],
+    "no_overwrite": ["为保护原图：禁止覆盖，请另存为到新文件"],
     "remove_select": ["已在所选位置生成新图片文件"],
     "txt_error": [
         "仅在编辑模式下允许导入 TXT 文件",

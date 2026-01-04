@@ -4,6 +4,7 @@ __copyright__ = "Copyright 2023"
 __email__ = "receyuki@gmail.com"
 
 import json
+from pathlib import Path
 from xml.dom import minidom
 
 import piexif
@@ -235,63 +236,67 @@ class ImageDataReader:
 
     @staticmethod
     def save_image(image_path, new_path, image_format, data=None):
-        with Image.open(image_path) as f:
-            try:
-                match image_format.upper():
-                    case "PNG":
-                        if data:
-                            metadata = PngInfo()
-                            src_info = f.info or {}
+        src_path = Path(image_path)
+        dst_path = Path(new_path)
+        if src_path.resolve(strict=False) == dst_path.resolve(strict=False):
+            raise ValueError("Refusing to overwrite the original image; save as a new file.")
 
-                            # If the source file contains ComfyUI metadata, adding an A1111-style
-                            # "parameters" field can cause ComfyUI to import a simplified workflow.
-                            # To ensure the original workflow (including hidden/custom nodes)
-                            # remains loadable, store the edited text under a non-standard key.
-                            if (
-                                ("workflow" in src_info or "prompt" in src_info)
-                                and "parameters" not in src_info
-                            ):
-                                parameter_key = "sd_prompt_reader_parameters"
-                            else:
-                                parameter_key = "parameters"
+        with Image.open(src_path) as f:
+            match image_format.upper():
+                case "PNG":
+                    if data:
+                        metadata = PngInfo()
+                        src_info = f.info or {}
 
-                            metadata.add_text(parameter_key, data)
-
-                            # Preserve ComfyUI metadata when rewriting edited text.
-                            for key in ("prompt", "workflow"):
-                                if key in src_info and src_info.get(key) not in (None, ""):
-                                    value = src_info.get(key)
-                                    if isinstance(value, (dict, list)):
-                                        value = json.dumps(value, ensure_ascii=False)
-                                    metadata.add_text(key, str(value))
-
-                            f.save(new_path, pnginfo=metadata)
+                        # If the source file contains ComfyUI metadata, adding an A1111-style
+                        # "parameters" field can cause ComfyUI to import a simplified workflow.
+                        # To ensure the original workflow (including hidden/custom nodes)
+                        # remains loadable, store the edited text under a non-standard key.
+                        if (
+                            ("workflow" in src_info or "prompt" in src_info)
+                            and "parameters" not in src_info
+                        ):
+                            parameter_key = "sd_prompt_reader_parameters"
                         else:
-                            f.save(new_path)
-                    case "JPEG" | "JPG" | "WEBP":
-                        metadata = None
-                        if data:
-                            metadata = piexif.dump(
-                                {
-                                    "Exif": {
-                                        piexif.ExifIFD.UserComment: (
-                                            piexif.helper.UserComment.dump(
-                                                data, encoding="unicode"
-                                            )
+                            parameter_key = "parameters"
+
+                        metadata.add_text(parameter_key, data)
+
+                        # Preserve ComfyUI metadata when rewriting edited text.
+                        for key in ("prompt", "workflow"):
+                            if key in src_info and src_info.get(key) not in (None, ""):
+                                value = src_info.get(key)
+                                if isinstance(value, (dict, list)):
+                                    value = json.dumps(value, ensure_ascii=False)
+                                metadata.add_text(key, str(value))
+
+                        f.save(dst_path, pnginfo=metadata)
+                    else:
+                        f.save(dst_path)
+                case "JPEG" | "JPG" | "WEBP":
+                    metadata = None
+                    if data:
+                        metadata = piexif.dump(
+                            {
+                                "Exif": {
+                                    piexif.ExifIFD.UserComment: (
+                                        piexif.helper.UserComment.dump(
+                                            data, encoding="unicode"
                                         )
-                                    },
-                                }
-                            )
+                                    )
+                                },
+                            }
+                        )
 
-                        if image_format.upper() in ("JPEG", "JPG"):
-                            f.save(new_path, quality="keep")
-                        else:
-                            f.save(new_path, quality=100, lossless=True)
+                    if image_format.upper() in ("JPEG", "JPG"):
+                        f.save(dst_path, quality="keep")
+                    else:
+                        f.save(dst_path, quality=100, lossless=True)
 
-                        if data and metadata:
-                            piexif.insert(metadata, str(new_path))
-            except Exception:
-                print("保存失败")
+                    if data and metadata:
+                        piexif.insert(metadata, str(dst_path))
+                case _:
+                    raise ValueError(f"Unsupported image format: {image_format}")
 
     @staticmethod
     def construct_data(positive, negative, setting):
