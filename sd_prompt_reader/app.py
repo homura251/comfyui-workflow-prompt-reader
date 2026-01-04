@@ -600,7 +600,8 @@ class App(Tk):
             total_w = self.main_pane.winfo_width()
             if total_w <= 1:
                 return
-            self.main_pane.sash_place(0, int(total_w * 0.6), 0)
+            # default ratio: image:text = 2:3
+            self.main_pane.sash_place(0, int(total_w * 0.4), 0)
         except Exception:
             pass
 
