@@ -9,7 +9,7 @@ import os
 import threading
 from collections import OrderedDict
 import xml.etree.ElementTree as ET
-from tkinter import PhotoImage, Menu, Canvas
+from tkinter import PhotoImage, Menu, Canvas, PanedWindow
 from urllib.parse import urlparse, unquote
 
 import pyperclip as pyperclip
@@ -82,20 +82,36 @@ class App(Tk):
         if platform.system() == "Windows":
             self.iconbitmap(ICO_FILE)
 
-        # configure layout
-        self.rowconfigure(tuple(range(4)), weight=1)
-        self.columnconfigure(tuple(range(7)), weight=1)
-        self.columnconfigure(0, weight=6)
-        # self.rowconfigure(0, weight=2)
-        # self.rowconfigure(1, weight=2)
-        # self.rowconfigure(2, weight=1)
-        # self.rowconfigure(3, weight=1)
+        # configure layout: draggable split (image | text)
+        try:
+            pane_bg = self._apply_appearance_mode(
+                ThemeManager.theme["CTkFrame"]["fg_color"]
+            )
+        except Exception:
+            pane_bg = None
+
+        self.main_pane = PanedWindow(
+            self,
+            orient="horizontal",
+            sashwidth=8,
+            bd=0,
+            relief="flat",
+            background=pane_bg,
+        )
+        self.main_pane.pack(fill="both", expand=True)
+
+        self.left_pane = CTkFrame(self.main_pane, fg_color="transparent")
+        self.right_pane = CTkFrame(self.main_pane, fg_color="transparent")
+        self.main_pane.add(self.left_pane, minsize=320)
+        self.main_pane.add(self.right_pane, minsize=300)
+
+        self.right_pane.rowconfigure((0, 1, 2), weight=1)
+        self.right_pane.rowconfigure(3, weight=0)
+        self.right_pane.columnconfigure(tuple(range(6)), weight=1)
 
         # image display
-        self.image_frame = CTkFrame(self)
-        self.image_frame.grid(
-            row=0, column=0, rowspan=4, sticky="news", padx=20, pady=20
-        )
+        self.image_frame = CTkFrame(self.left_pane)
+        self.image_frame.pack(fill="both", expand=True, padx=20, pady=20)
 
         self.image_canvas = Canvas(self.image_frame, highlightthickness=0, bd=0)
         self.image_canvas.pack(fill="both", expand=True)
@@ -184,10 +200,10 @@ class App(Tk):
         self.readable = False
 
         # status bar
-        self.status_bar = StatusBar(self)
+        self.status_bar = StatusBar(self.right_pane)
         self.status_bar.status_frame.grid(
             row=3,
-            column=6,
+            column=5,
             sticky="ew",
             padx=20,
             pady=(0, 20),
@@ -212,25 +228,29 @@ class App(Tk):
         )
 
         # textbox
-        self.positive_box = PromptViewer(self, self.status_bar, "正向提示词")
+        self.positive_box = PromptViewer(
+            self, self.status_bar, "正向提示词", master=self.right_pane
+        )
         self.positive_box.viewer_frame.grid(
-            row=0, column=1, columnspan=6, sticky="news", padx=(0, 20), pady=(20, 20)
+            row=0, column=0, columnspan=6, sticky="news", padx=(0, 20), pady=(20, 20)
         )
 
-        self.negative_box = PromptViewer(self, self.status_bar, "反向提示词")
+        self.negative_box = PromptViewer(
+            self, self.status_bar, "反向提示词", master=self.right_pane
+        )
         self.negative_box.viewer_frame.grid(
-            row=1, column=1, columnspan=6, sticky="news", padx=(0, 20), pady=(0, 20)
+            row=1, column=0, columnspan=6, sticky="news", padx=(0, 20), pady=(0, 20)
         )
 
-        self.setting_box = STkTextbox(self, wrap="word", height=80)
+        self.setting_box = STkTextbox(self.right_pane, wrap="word", height=80, width=100)
         self.setting_box.grid(
-            row=2, column=1, columnspan=6, sticky="news", padx=(0, 20), pady=(1, 21)
+            row=2, column=0, columnspan=6, sticky="news", padx=(0, 20), pady=(1, 21)
         )
         self.setting_box.text = "参数"
 
         # setting box simple mode
         self.setting_box_simple = CTkFrame(
-            self, height=80, fg_color=self.textbox_fg_color
+            self.right_pane, height=80, fg_color=self.textbox_fg_color
         )
         self.setting_box_parameter = CTkFrame(
             self.setting_box_simple, fg_color="transparent"
@@ -310,9 +330,9 @@ class App(Tk):
 
         # function buttons
         # edit
-        self.button_edit_frame = CTkFrame(self, fg_color="transparent")
+        self.button_edit_frame = CTkFrame(self.right_pane, fg_color="transparent")
         self.button_edit_frame.grid(
-            row=3, column=1, pady=(0, 20), padx=(0, 20), sticky="w"
+            row=3, column=0, pady=(0, 20), padx=(0, 20), sticky="w"
         )
         self.button_edit = STkButton(
             self.button_edit_frame,
@@ -339,9 +359,9 @@ class App(Tk):
         )
 
         # save
-        self.button_save_frame = CTkFrame(self, fg_color="transparent")
+        self.button_save_frame = CTkFrame(self.right_pane, fg_color="transparent")
         self.button_save_frame.grid(
-            row=3, column=2, pady=(0, 20), padx=(0, 20), sticky="w"
+            row=3, column=1, pady=(0, 20), padx=(0, 20), sticky="w"
         )
         self.button_save = STkButton(
             self.button_save_frame,
@@ -384,9 +404,9 @@ class App(Tk):
         )
 
         # remove
-        self.button_remove_frame = CTkFrame(self, fg_color="transparent")
+        self.button_remove_frame = CTkFrame(self.right_pane, fg_color="transparent")
         self.button_remove_frame.grid(
-            row=3, column=3, pady=(0, 20), padx=(0, 20), sticky="w"
+            row=3, column=2, pady=(0, 20), padx=(0, 20), sticky="w"
         )
         self.button_remove = STkButton(
             self.button_remove_frame,
@@ -431,9 +451,9 @@ class App(Tk):
         )
 
         # export
-        self.button_export_frame = CTkFrame(self, fg_color="transparent")
+        self.button_export_frame = CTkFrame(self.right_pane, fg_color="transparent")
         self.button_export_frame.grid(
-            row=3, column=4, pady=(0, 20), padx=(0, 20), sticky="w"
+            row=3, column=3, pady=(0, 20), padx=(0, 20), sticky="w"
         )
         self.button_export = STkButton(
             self.button_export_frame,
@@ -478,8 +498,8 @@ class App(Tk):
         )
 
         # copy
-        self.button_copy_raw_frame = CTkFrame(self, fg_color="transparent")
-        self.button_copy_raw_frame.grid(row=3, column=5, pady=(0, 20), sticky="w")
+        self.button_copy_raw_frame = CTkFrame(self.right_pane, fg_color="transparent")
+        self.button_copy_raw_frame.grid(row=3, column=4, pady=(0, 20), sticky="w")
         self.button_raw = STkButton(
             self.button_copy_raw_frame,
             width=BUTTON_WIDTH_L,
@@ -571,6 +591,18 @@ class App(Tk):
             self.display_info(sys.argv[1], is_selected=True)
         # open with in macOS
         self.createcommand("::tk::mac::OpenDocument", self.open_document_handler)
+
+        # place sash after initial layout
+        self.after(50, self._init_pane_sash)
+
+    def _init_pane_sash(self):
+        try:
+            total_w = self.main_pane.winfo_width()
+            if total_w <= 1:
+                return
+            self.main_pane.sash_place(0, int(total_w * 0.6), 0)
+        except Exception:
+            pass
 
     def open_document_handler(self, *args):
         self.display_info(args[0], is_selected=True)
@@ -1600,7 +1632,7 @@ class App(Tk):
                 self.button_view_setting.mode = SettingMode.SIMPLE
                 self.setting_box_simple.grid(
                     row=2,
-                    column=1,
+                    column=0,
                     columnspan=6,
                     sticky="news",
                     padx=(0, 20),
@@ -1612,7 +1644,7 @@ class App(Tk):
                 self.button_view_setting.mode = SettingMode.NORMAL
                 self.setting_box.grid(
                     row=2,
-                    column=1,
+                    column=0,
                     columnspan=6,
                     sticky="news",
                     padx=(0, 20),

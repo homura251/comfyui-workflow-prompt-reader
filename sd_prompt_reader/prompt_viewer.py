@@ -14,7 +14,7 @@ from .utility import load_icon, copy_to_clipboard
 
 
 class PromptViewer:
-    def __init__(self, parent, status_bar, default_text):
+    def __init__(self, parent, status_bar, default_text, master=None):
         self.clipboard_image = load_icon(COPY_FILE_L, (24, 24))
         self.clipboard_image_s = load_icon(COPY_FILE_S, (20, 20))
         self.sort_image = load_icon(SORT_FILE, (20, 20))
@@ -27,7 +27,7 @@ class PromptViewer:
         self.is_sdxl = False
         self.parent = parent
 
-        self.viewer_frame = CTkFrame(self.parent, fg_color="transparent")
+        self.viewer_frame = CTkFrame(master or self.parent, fg_color="transparent")
 
         self.prompt_frame = CTkFrame(self.viewer_frame, fg_color="transparent")
         self.prompt_frame.pack(fill="both", expand=True)
