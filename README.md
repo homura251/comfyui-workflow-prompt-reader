@@ -139,7 +139,7 @@ OR
 ### Remove prompt from image
 - Click "Clear" will generate a new image file with suffix "_data_removed" alongside the original image file.
 - To save to another location, click the expand arrow and click "select directory".
-- To overwrite the original image file, click the expand arrow and click "overwrite the original image".  
+- To prevent losing workflows/prompts, this fork disables overwriting the original image: it always saves as a new file.  
 ![remove](https://github.com/receyuki/stable-diffusion-prompt-reader/raw/master/images/remove.png)
 
 ### Edit image
@@ -151,7 +151,7 @@ OR
 - Edit the prompt directly in the textbox or import a metadata file in txt format.
 - Click "Save" will generate a edited image file with suffix "_edited" alongside the original image file.
 - To save to another location, click the expand arrow and click "select directory".
-- To overwrite the original image file, click the expand arrow and click "overwrite the original image".  
+- To prevent losing workflows/prompts, this fork disables overwriting the original image: it always saves as a new file.  
 ![save](https://github.com/receyuki/stable-diffusion-prompt-reader/raw/master/images/save.png)
 
 ### Copy as single line prompt

@@ -22,7 +22,7 @@ class StatusBar:
         self.status_frame = CTkFrame(parent)
         self.status_label = CTkLabel(
             self.status_frame,
-            width=230,
+            width=0,
             height=STATUS_BAR_HEIGHT,
             text=MESSAGE["default"][0],
             text_color=ACCESSIBLE_GRAY,
@@ -60,8 +60,6 @@ class StatusBar:
         match remove_mode:
             case "添加后缀":
                 self.info(MESSAGE["suffix"][0])
-            case "覆盖原图":
-                self.info(MESSAGE["overwrite"][0])
             case "选择位置":
                 self.info(MESSAGE["remove_select"][0])
 

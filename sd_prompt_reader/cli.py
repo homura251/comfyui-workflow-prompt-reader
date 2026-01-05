@@ -242,14 +242,26 @@ def cli(
                             stem = file_path.stem
                         folder.mkdir(parents=True, exist_ok=True)
                     target_file_name = folder / stem
+                    destination = target_file_name.with_suffix(file_path.suffix)
+                    if file_path.resolve(strict=False) == destination.resolve(strict=False):
+                        if not target.suffix:
+                            suffix = "_data_removed" if operation == "clear" else "_edited"
+                            destination = destination.with_stem(destination.stem + suffix)
+                            logger.warning(
+                                f"为保护原图，已自动改为另存为：{destination.name}"
+                            )
+                        else:
+                            raise click.UsageError(
+                                "为保护原图，禁止覆盖原图；请指定不同的输出文件路径。"
+                            )
                     try:
                         ImageDataReader.save_image(
                             file,
-                            target_file_name.with_suffix(file_path.suffix),
+                            destination,
                             file_path.suffix.lstrip(".").upper(),
                             None if operation == "clear" else data,
                         )
-                    except IOError as e:
+                    except Exception as e:
                         logger.error(f"保存失败：{e}")
                     else:
                         logger.debug("输出成功")
@@ -272,7 +284,7 @@ def cli(
                             file_path.suffix.lstrip(".").upper(),
                             None if operation == "clear" else data,
                         )
-                    except IOError as e:
+                    except Exception as e:
                         logger.error(f"保存失败：{e}")
                     else:
                         logger.debug("输出成功")

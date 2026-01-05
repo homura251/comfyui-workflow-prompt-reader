@@ -138,7 +138,7 @@ pipx install sd-prompt-reader
 ### 去除图片中的 prompt
 - 点击 "Clear" 将在原图像文件旁生成一个后缀为"_data_removed"的图像文件.
 - 要保存到另一个位置, 点击展开的箭头并点击 "select directory".  
-- 要覆盖原始图像文件, 点击展开的箭头并点击 "overwrite the original image".  
+- 为避免丢失工作流与提示词，本项目已禁用覆盖原图：始终另存为新文件.  
 ![remove](./images/remove.png)
 
 ### 编辑图片
@@ -149,7 +149,7 @@ pipx install sd-prompt-reader
 - 直接在文本框中编辑 prompt, 或者导入 txt 格式的prompt数据.  
 - 点击 "Save" 将在原图像文件旁生成一个后缀为 "_edited" 的编辑后图像文件.  
 - 要保存到另一个位置, 点击展开的箭头并点击 "select directory".  
-- 要覆盖原始图像文件, 点击展开的箭头并点击 "overwrite the original image".  
+- 为避免丢失工作流与提示词，本项目已禁用覆盖原图：始终另存为新文件.  
 ![save](./images/save.png)
 
 ### 复制为单行 prompt
