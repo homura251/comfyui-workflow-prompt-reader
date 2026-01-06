@@ -7,6 +7,7 @@ import platform
 import sys
 import os
 import json
+import subprocess
 import threading
 from collections import OrderedDict
 import xml.etree.ElementTree as ET
@@ -75,6 +76,7 @@ class App(Tk):
         self.expand_image = self.load_icon(EXPAND_FILE, (12, 24))
         self.sort_image = self.load_icon(SORT_FILE, (20, 20))
         self.view_image = self.load_icon(LIGHTBULB_FILE, (20, 20))
+        self.reveal_image = self.load_icon(REVEAL_FILE, (24, 24))
         self.icon_image = CTkImage(Image.open(ICON_FILE), size=(100, 100))
         self.icon_cube_image = CTkImage(Image.open(ICON_CUBE_FILE), size=(100, 100))
 
@@ -226,6 +228,21 @@ class App(Tk):
             self.button_image_sort,
             delay=TOOLTIP_DELAY,
             message=TOOLTIP["img_sort"],
+        )
+        self.button_reveal = STkButton(
+            self.status_bar.status_frame,
+            width=110,
+            height=STATUS_BAR_HEIGHT,
+            image=self.reveal_image,
+            text="打开位置",
+            font=self.info_font,
+            command=self.reveal_in_file_manager,
+        )
+        self.button_reveal.pack(side="right", padx=(0, 4))
+        self.button_reveal_tooltip = CTkToolTip(
+            self.button_reveal,
+            delay=TOOLTIP_DELAY,
+            message=TOOLTIP["reveal"],
         )
 
         # textbox
@@ -553,6 +570,7 @@ class App(Tk):
             self.button_remove,
             self.button_export,
             self.button_remove,
+            self.button_reveal,
         ]
 
         # button list for edit mode
@@ -605,6 +623,27 @@ class App(Tk):
             self.main_pane.sash_place(0, int(total_w * 0.4), 0)
         except Exception:
             pass
+
+    def reveal_in_file_manager(self):
+        if not self.file_path:
+            return
+        path = Path(self.file_path)
+        if not path.exists():
+            self.status_bar.warning(MESSAGE["reveal_error"][0])
+            return
+
+        try:
+            system = platform.system()
+            if system == "Windows":
+                subprocess.Popen(["explorer.exe", "/select,", str(path)])
+            elif system == "Darwin":
+                subprocess.Popen(["open", "-R", str(path)])
+            else:
+                subprocess.Popen(["xdg-open", str(path.parent)])
+        except Exception:
+            self.status_bar.warning(MESSAGE["reveal_error"][0])
+        else:
+            self.status_bar.info(MESSAGE["reveal"][0])
 
     def open_document_handler(self, *args):
         self.display_info(args[0], is_selected=True)

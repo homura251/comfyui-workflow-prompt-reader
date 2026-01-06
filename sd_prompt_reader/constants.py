@@ -16,6 +16,10 @@ WARNING_FILE = Path(RESOURCE_DIR, "warning_24.png")
 OK_FILE = Path(RESOURCE_DIR, "check_circle_24.png")
 UPDATE_FILE = Path(RESOURCE_DIR, "update_24.png")
 DROP_FILE = Path(RESOURCE_DIR, "place_item_48.png")
+REVEAL_FILE = (
+    Path(RESOURCE_DIR, "place_item_48.png"),
+    Path(RESOURCE_DIR, "place_item_48_alpha.png"),
+)
 COPY_FILE_L = (
     Path(RESOURCE_DIR, "content_copy_24.png"),
     Path(RESOURCE_DIR, "content_copy_24_alpha.png"),
@@ -73,6 +77,8 @@ MESSAGE = {
     "prompt_select": ["Prompt JSON 已导出到所选位置"],
     "workflow_missing": ["图片中未包含工作流元数据"],
     "prompt_missing": ["图片中未包含 prompt 元数据"],
+    "reveal": ["已在文件管理器中打开"],
+    "reveal_error": ["打开失败"],
     "remove": ["已生成新图片文件"],
     "suffix": ["已生成带后缀的新图片文件"],
     "overwrite": ["已覆盖原始图片文件"],
@@ -99,6 +105,7 @@ TOOLTIP = {
     "save": "保存编辑后的图片",
     "clear": "清除图片中的元数据",
     "export": "导出元数据到 TXT 文件",
+    "reveal": "在资源管理器/Finder 中显示图片",
     "copy_raw": "复制原始元数据到剪贴板",
     "copy_prompt": "复制提示词到剪贴板",
     "copy_setting": "复制参数到剪贴板",
