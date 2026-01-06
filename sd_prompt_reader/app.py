@@ -118,10 +118,21 @@ class App(Tk):
 
         self.image_canvas = Canvas(self.image_frame, highlightthickness=0, bd=0)
         self.image_canvas.pack(fill="both", expand=True)
-        self.image_canvas.bind("<Button-1>", self.on_canvas_click)
+        self._canvas_press_xy = None
+        self._canvas_moved = False
+
+        self.image_canvas.bind("<ButtonPress-1>", self.on_canvas_press)
+        self.image_canvas.bind("<B1-Motion>", self.on_canvas_drag_motion)
+        self.image_canvas.bind("<ButtonRelease-1>", self.on_canvas_release)
         self.image_canvas.bind("<Motion>", self.on_canvas_motion)
         self.image_canvas.bind("<Leave>", self.on_canvas_leave)
         self.image_canvas.bind("<Configure>", self.resize_image)
+
+        try:
+            self.image_canvas.drag_source_register(1, DND_FILES)
+            self.image_canvas.dnd_bind("<<DragInitCmd>>", self.on_canvas_drag_init)
+        except Exception:
+            pass
 
         self._canvas_render_after_id = None
         self._hq_render_after_id = None
@@ -1473,18 +1484,47 @@ class App(Tk):
             str(self._image_sequence[new_index]), is_selected=True, is_navigation=True
         )
 
-    def on_canvas_click(self, event):
+    def on_canvas_press(self, event):
+        self._canvas_press_xy = (event.x, event.y)
+        self._canvas_moved = False
+
         current = self.image_canvas.find_withtag("current")
         if current:
             tags = self.image_canvas.gettags(current[0])
             if "nav_prev" in tags and self._nav_prev_enabled:
                 self.navigate_image(-1)
+                self._canvas_press_xy = None
                 return
             if "nav_next" in tags and self._nav_next_enabled:
                 self.navigate_image(1)
+                self._canvas_press_xy = None
                 return
 
+    def on_canvas_drag_motion(self, event):
+        if not self._canvas_press_xy:
+            return
+        x0, y0 = self._canvas_press_xy
+        if abs(event.x - x0) + abs(event.y - y0) >= 6:
+            self._canvas_moved = True
+
+    def on_canvas_release(self, event):
+        if not self._canvas_press_xy:
+            return
+        if self._canvas_moved:
+            return
         self.display_info(self.select_image(), is_selected=True)
+
+    def on_canvas_drag_init(self, event):
+        if not self.file_path:
+            return ("copy", DND_FILES, "")
+        path = Path(self.file_path)
+        if not path.exists():
+            return ("copy", DND_FILES, "")
+        try:
+            data = self.tk.call("list", str(path))
+        except Exception:
+            data = str(path)
+        return ("copy", DND_FILES, data)
 
     def on_canvas_motion(self, event):
         current = self.image_canvas.find_withtag("current")
