@@ -135,6 +135,9 @@ pipx install sd-prompt-reader
 - 要保存到另一个位置, 点击展开的箭头并点击 "select directory".  
 ![export](./images/export.png)
 
+### 导出 ComfyUI 工作流(元数据)到 JSON
+- 点击 "Export" 右侧展开箭头，选择 `工作流：选择位置`（或 `Prompt：选择位置`）导出为 `.json` 文件.
+
 ### 去除图片中的 prompt
 - 点击 "Clear" 将在原图像文件旁生成一个后缀为"_data_removed"的图像文件.
 - 要保存到另一个位置, 点击展开的箭头并点击 "select directory".  

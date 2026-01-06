@@ -6,6 +6,7 @@ __email__ = "receyuki@gmail.com"
 import platform
 import sys
 import os
+import json
 import threading
 from collections import OrderedDict
 import xml.etree.ElementTree as ET
@@ -469,8 +470,8 @@ class App(Tk):
             self,
             font=self.info_font,
             dynamic_resizing=False,
-            values=["选择位置"],
-            command=self.export_txt,
+            values=["TXT：选择位置", "工作流：选择位置", "Prompt：选择位置"],
+            command=self.export_select,
         )
         self.button_export_option_arrow = STkButton(
             self.button_export_frame,
@@ -1498,6 +1499,47 @@ class App(Tk):
                         ) as f:
                             f.write(self.image_data.raw)
                             self.status_bar.success(MESSAGE["txt_select"][0])
+
+    def export_select(self, export_mode: str):
+        match export_mode:
+            case "TXT：选择位置":
+                self.export_txt("选择位置")
+            case "工作流：选择位置":
+                self.export_workflow_json()
+            case "Prompt：选择位置":
+                self.export_prompt_json()
+
+    def export_workflow_json(self):
+        workflow = getattr(self.image_data, "workflow_json", None)
+        if workflow is None:
+            self.status_bar.warning(MESSAGE["workflow_missing"][0])
+            return
+        path = filedialog.asksaveasfilename(
+            title="选择保存位置",
+            initialdir=self.file_path.parent,
+            initialfile=f"{self.file_path.stem}_workflow.json",
+            filetypes=(("JSON 文件", "*.json"),),
+        )
+        if path:
+            with open(Path(path).with_suffix(".json"), "w", encoding="utf-8") as f:
+                json.dump(workflow, f, ensure_ascii=False, indent=2)
+            self.status_bar.success(MESSAGE["workflow_select"][0])
+
+    def export_prompt_json(self):
+        prompt = getattr(self.image_data, "prompt_json", None)
+        if prompt is None:
+            self.status_bar.warning(MESSAGE["prompt_missing"][0])
+            return
+        path = filedialog.asksaveasfilename(
+            title="选择保存位置",
+            initialdir=self.file_path.parent,
+            initialfile=f"{self.file_path.stem}_prompt.json",
+            filetypes=(("JSON 文件", "*.json"),),
+        )
+        if path:
+            with open(Path(path).with_suffix(".json"), "w", encoding="utf-8") as f:
+                json.dump(prompt, f, ensure_ascii=False, indent=2)
+            self.status_bar.success(MESSAGE["prompt_select"][0])
 
     def remove_data(self, remove_mode: str = None):
         new_stem = self.file_path.stem + "_data_removed"

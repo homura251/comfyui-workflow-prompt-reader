@@ -136,6 +136,9 @@ OR
 - To save to another location, click the expand arrow and click "select directory".  
 ![export](https://github.com/receyuki/stable-diffusion-prompt-reader/raw/master/images/export.png)
 
+### Export ComfyUI workflow metadata (JSON)
+- Click the expand arrow next to "Export", then choose `工作流：选择位置` (or `Prompt：选择位置`) to export the embedded metadata as a `.json` file.
+
 ### Remove prompt from image
 - Click "Clear" will generate a new image file with suffix "_data_removed" alongside the original image file.
 - To save to another location, click the expand arrow and click "select directory".

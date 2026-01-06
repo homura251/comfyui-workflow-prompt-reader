@@ -314,6 +314,25 @@ class ImageDataReader:
     def prompt_to_line(self):
         return self._parser.prompt_to_line()
 
+    def _json_metadata_field(self, key: str):
+        value = (self._info or {}).get(key)
+        if value in (None, ""):
+            return None
+        if isinstance(value, (dict, list)):
+            return value
+        try:
+            return json.loads(str(value))
+        except Exception:
+            return None
+
+    @property
+    def workflow_json(self):
+        return self._json_metadata_field("workflow")
+
+    @property
+    def prompt_json(self):
+        return self._json_metadata_field("prompt")
+
     @property
     def height(self):
         return self._parser.height if self._tool else self._height
